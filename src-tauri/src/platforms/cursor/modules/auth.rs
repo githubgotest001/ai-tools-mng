@@ -35,7 +35,7 @@ pub struct UsageSummary {
 }
 
 /// 个人用量
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct IndividualUsage {
     #[serde(default)]
@@ -46,6 +46,37 @@ pub struct IndividualUsage {
     pub billing_cycle_start: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub billing_cycle_end: Option<String>,
+    /// Grok Bot 周额度（与 Auto / API 月度池分开）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grok_bot: Option<GrokBotUsage>,
+}
+
+/// Grok Bot 周额度
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GrokBotUsage {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub percent_used: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub used: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remaining: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub period_start: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub period_end: Option<String>,
+}
+
+impl GrokBotUsage {
+    pub fn has_meter(&self) -> bool {
+        self.percent_used.is_some()
+            || (self.used.is_some() && self.limit.is_some())
+            || (self.remaining.is_some() && self.limit.is_some())
+    }
 }
 
 /// Plan 用量
@@ -226,7 +257,12 @@ pub async fn get_user_info(session_token: &str) -> Result<CursorUserInfo, String
 }
 
 /// 获取用量摘要（使用 session_token + Cookie 认证）
-pub async fn get_usage_summary(session_token: &str) -> Result<UsageSummary, String> {
+///
+/// `access_token` 可选，保留兼容；Grok Bot 周额度走 session Cookie 的 Sand 接口。
+pub async fn get_usage_summary(
+    session_token: &str,
+    _access_token: Option<&str>,
+) -> Result<UsageSummary, String> {
     let client = create_proxy_client()?;
 
     let response = client
@@ -242,23 +278,44 @@ pub async fn get_usage_summary(session_token: &str) -> Result<UsageSummary, Stri
         .map_err(|e| format!("Usage summary request failed: {}", e))?;
 
     let status = response.status();
+    let usage_ok = status.is_success();
 
-    if status.is_success() {
+    let mut summary = if usage_ok {
         let body = response
             .text()
             .await
             .map_err(|e| format!("Failed to read response: {}", e))?;
 
-        serde_json::from_str::<UsageSummary>(&body)
-            .map_err(|e| format!("Failed to parse usage summary: {}", e))
+        let raw: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| format!("Failed to parse usage summary json: {}", e))?;
+        let mut parsed = serde_json::from_value::<UsageSummary>(raw.clone())
+            .map_err(|e| format!("Failed to parse usage summary: {}", e))?;
+
+        if !super::grok_bot::has_grok_bot_meter(&parsed) {
+            if let Some(bot) = super::grok_bot::extract_from_value(&raw) {
+                super::grok_bot::attach_grok_bot(&mut parsed, bot);
+            }
+        }
+        parsed
     } else {
-        Ok(UsageSummary {
+        UsageSummary {
             membership_type: Some("free".to_string()),
             individual_usage: None,
             billing_cycle_start: None,
             billing_cycle_end: None,
-        })
+        }
+    };
+
+    // usage-summary 不含 Grok Bot；仪表盘走 get-sand-usage-status。
+    // 不按套餐门控：Pro 账号若链接了 SuperGrok 也会有周额度。
+    // usage-summary 失败时 session 多半也过期，不必再打 Sand。
+    if usage_ok && !super::grok_bot::has_grok_bot_meter(&summary) {
+        if let Some(bot) = super::grok_bot::fetch_grok_bot_usage(session_token).await {
+            super::grok_bot::attach_grok_bot(&mut summary, bot);
+        }
     }
+
+    Ok(summary)
 }
 
 /// Stripe Profile 响应结构（api2.cursor.sh/auth/full_stripe_profile）

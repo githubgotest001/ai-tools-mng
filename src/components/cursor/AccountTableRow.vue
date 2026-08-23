@@ -62,11 +62,11 @@
       </div>
     </td>
 
-    <!-- 用量 -->
-    <td class="w-[130px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[12px] text-text-muted">
-      <div v-if="hasSessionToken && (autoRemainingPercent !== null || apiRemainingPercent !== null)" class="flex flex-col gap-1">
+    <!-- 可用额度 -->
+    <td class="w-[150px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[12px] text-text-muted">
+      <div v-if="hasSessionToken && (autoRemainingPercent !== null || apiRemainingPercent !== null || showGrokBot)" class="flex flex-col gap-1">
         <div v-if="autoRemainingPercent !== null" class="flex items-center gap-1">
-          <span class="w-7 shrink-0 text-text-muted/60">Auto</span>
+          <span class="w-7 shrink-0 text-text-muted/60" v-tooltip="$t('platform.cursor.autoAvailableHint')">{{ $t('platform.cursor.autoShort') }}</span>
           <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
             <div class="h-full rounded transition-all"
                  :class="getQuotaBarClass(autoRemainingPercent)"
@@ -76,7 +76,7 @@
           <span class="text-[11px] font-medium tabular-nums w-7 text-right">{{ autoRemainingPercent }}%</span>
         </div>
         <div v-if="apiRemainingPercent !== null" class="flex items-center gap-1">
-          <span class="w-7 shrink-0 text-text-muted/60">API</span>
+          <span class="w-7 shrink-0 text-text-muted/60" v-tooltip="$t('platform.cursor.apiAvailableHint')">{{ $t('platform.cursor.apiShort') }}</span>
           <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
             <div class="h-full rounded transition-all"
                  :class="getQuotaBarClass(apiRemainingPercent)"
@@ -84,6 +84,16 @@
             </div>
           </div>
           <span class="text-[11px] font-medium tabular-nums w-7 text-right">{{ apiRemainingPercent }}%</span>
+        </div>
+        <div v-if="showGrokBot" class="flex items-center gap-1">
+          <span class="w-7 shrink-0 text-text-muted/60" v-tooltip="grokBotHint">{{ $t('platform.cursor.grokBotShort') }}</span>
+          <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
+            <div class="h-full rounded transition-all"
+                 :class="getQuotaBarClass(grokBotRemaining)"
+                 :style="{ width: grokBotRemaining + '%' }">
+            </div>
+          </div>
+          <span class="text-[11px] font-medium tabular-nums w-7 text-right">{{ grokBotRemaining }}%</span>
         </div>
       </div>
       <span v-else class="text-text-muted/50">-</span>
@@ -207,6 +217,7 @@ import { useI18n } from 'vue-i18n'
 import FloatingDropdown from '../common/FloatingDropdown.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
 import CursorUsageModal from './CursorUsageModal.vue'
+import { useCursorQuota } from '../../composables/useCursorQuota'
 
 const { t: $t } = useI18n()
 
@@ -227,30 +238,6 @@ const getMembershipBadgeClass = (type) => {
   }
 }
 
-// 配额进度条样式
-const getQuotaBarClass = (percent) => {
-  if (percent === null || percent === undefined) return 'bg-text-muted'
-  if (percent < 10) return 'bg-danger'
-  if (percent < 30) return 'bg-warning'
-  return 'bg-success'
-}
-
-const hasSessionToken = computed(() => !!props.account.token?.workos_cursor_session_token)
-
-// Auto 剩余百分比
-const autoRemainingPercent = computed(() => {
-  const used = props.account.individual_usage?.plan?.autoPercentUsed
-  if (used === null || used === undefined) return null
-  return Math.max(0, Math.round(100 - used))
-})
-
-// API 剩余百分比
-const apiRemainingPercent = computed(() => {
-  const used = props.account.individual_usage?.plan?.apiPercentUsed
-  if (used === null || used === undefined) return null
-  return Math.max(0, Math.round(100 - used))
-})
-
 const props = defineProps({
   account: { type: Object, required: true },
   isCurrent: { type: Boolean, default: false },
@@ -262,6 +249,24 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['switch', 'delete', 'select', 'account-updated', 'account-synced', 'machine-id-generated'])
+
+const hasSessionToken = computed(() => !!props.account.token?.workos_cursor_session_token)
+
+const {
+  autoRemainingPercent,
+  apiRemainingPercent,
+  grokBotRemaining,
+  showGrokBot,
+  grokBotResetLabel,
+  getQuotaBarClass
+} = useCursorQuota(() => props.account)
+
+const grokBotHint = computed(() => {
+  const base = $t('platform.cursor.grokBotAvailableHint')
+  return grokBotResetLabel.value
+    ? `${base} · ${$t('platform.cursor.grokBotResets', { date: grokBotResetLabel.value })}`
+    : base
+})
 
 const menuRef = ref(null)
 const showTagEditor = ref(false)

@@ -170,13 +170,13 @@
         </div>
       </div>
 
-      <!-- Auto 用量 -->
+      <!-- Auto 剩余 -->
       <div v-if="autoRemainingPercent !== null && hasSessionToken" class="flex items-center gap-1 min-h-6">
         <div class="flex items-center gap-1.5 w-[90px] shrink-0 text-text-muted text-xs">
           <svg class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 12h2v5H7zm4-3h2v8h-2zm4-3h2v11h-2z"/>
           </svg>
-          <span>{{ $t('platform.cursor.autoUsage') }}</span>
+          <span v-tooltip="$t('platform.cursor.autoAvailableHint')">{{ $t('platform.cursor.autoAvailable') }}</span>
         </div>
         <div class="flex-1 flex items-center gap-1">
           <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
@@ -191,13 +191,13 @@
         </div>
       </div>
 
-      <!-- API 用量 -->
+      <!-- API 剩余 -->
       <div v-if="apiRemainingPercent !== null && hasSessionToken" class="flex items-center gap-1 min-h-6">
         <div class="flex items-center gap-1.5 w-[90px] shrink-0 text-text-muted text-xs">
           <svg class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 12h2v5H7zm4-3h2v8h-2zm4-3h2v11h-2z"/>
           </svg>
-          <span>{{ $t('platform.cursor.apiUsage') }}</span>
+          <span v-tooltip="$t('platform.cursor.apiAvailableHint')">{{ $t('platform.cursor.apiAvailable') }}</span>
         </div>
         <div class="flex-1 flex items-center gap-1">
           <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
@@ -208,6 +208,27 @@
           </div>
           <span class="text-[11px] font-medium tabular-nums text-text-muted w-8 text-right">
             {{ apiRemainingPercent }}%
+          </span>
+        </div>
+      </div>
+
+      <!-- Grok Bot 周额 -->
+      <div v-if="showGrokBot && hasSessionToken" class="flex items-center gap-1 min-h-6">
+        <div class="flex items-center gap-1.5 w-[90px] shrink-0 text-text-muted text-xs">
+          <svg class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15 13z"/>
+          </svg>
+          <span v-tooltip="grokBotHint">{{ $t('platform.cursor.grokBotAvailable') }}</span>
+        </div>
+        <div class="flex-1 flex items-center gap-1">
+          <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
+            <div class="h-full rounded transition-all"
+                 :class="getQuotaBarClass(grokBotRemaining)"
+                 :style="{ width: grokBotRemaining + '%' }">
+            </div>
+          </div>
+          <span class="text-[11px] font-medium tabular-nums text-text-muted w-8 text-right">
+            {{ grokBotRemaining }}%
           </span>
         </div>
       </div>
@@ -289,6 +310,7 @@ import { useI18n } from 'vue-i18n'
 import FloatingDropdown from '../common/FloatingDropdown.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
 import CursorUsageModal from './CursorUsageModal.vue'
+import { useCursorQuota } from '../../composables/useCursorQuota'
 
 const { t: $t } = useI18n()
 
@@ -327,28 +349,22 @@ const getMembershipBadgeClass = (type) => {
   }
 }
 
-// 配额进度条样式
-const getQuotaBarClass = (percent) => {
-  if (percent === null || percent === undefined) return 'bg-text-muted'
-  if (percent < 10) return 'bg-danger'
-  if (percent < 30) return 'bg-warning'
-  return 'bg-success'
-}
-
 const hasSessionToken = computed(() => !!props.account.token?.workos_cursor_session_token)
 
-// Auto 剩余百分比
-const autoRemainingPercent = computed(() => {
-  const used = props.account.individual_usage?.plan?.autoPercentUsed
-  if (used === null || used === undefined) return null
-  return Math.max(0, Math.round(100 - used))
-})
+const {
+  autoRemainingPercent,
+  apiRemainingPercent,
+  grokBotRemaining,
+  showGrokBot,
+  grokBotResetLabel,
+  getQuotaBarClass
+} = useCursorQuota(() => props.account)
 
-// API 剩余百分比
-const apiRemainingPercent = computed(() => {
-  const used = props.account.individual_usage?.plan?.apiPercentUsed
-  if (used === null || used === undefined) return null
-  return Math.max(0, Math.round(100 - used))
+const grokBotHint = computed(() => {
+  const base = $t('platform.cursor.grokBotAvailableHint')
+  return grokBotResetLabel.value
+    ? `${base} · ${$t('platform.cursor.grokBotResets', { date: grokBotResetLabel.value })}`
+    : base
 })
 
 const maskedEmail = computed(() => {

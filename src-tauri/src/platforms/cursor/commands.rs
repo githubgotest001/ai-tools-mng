@@ -266,10 +266,13 @@ pub async fn cursor_validate_account(app: AppHandle, account_id: String) -> Resu
 //     // Ok(results)
 // }
 
-/// 获取用量摘要
+/// 获取用量摘要（含 Ultra / Pro+ 的 Grok Bot 周额度）
 #[tauri::command]
-pub async fn cursor_get_usage_summary(session_token: String) -> Result<auth::UsageSummary, String> {
-    auth::get_usage_summary(&session_token).await
+pub async fn cursor_get_usage_summary(
+    session_token: String,
+    access_token: Option<String>,
+) -> Result<auth::UsageSummary, String> {
+    auth::get_usage_summary(&session_token, access_token.as_deref()).await
 }
 
 /// 获取账号聚合用量数据

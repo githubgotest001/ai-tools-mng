@@ -46,6 +46,20 @@
           <div v-if="individualUsage?.onDemand?.enabled" class="text-[11px] text-text-muted mt-1">{{ $t('cursorUsage.onDemand') }}: ${{ formatCents(individualUsage.onDemand.used) }} / ${{ formatCents(individualUsage.onDemand.limit) }}</div>
         </div>
       </div>
+      <div v-if="autoRemainingPercent !== null || apiRemainingPercent !== null || showGrokBot" class="mt-3 grid gap-3" :class="showGrokBot ? 'grid-cols-3' : 'grid-cols-2'">
+        <div v-if="autoRemainingPercent !== null" class="rounded-md border border-border px-3 py-2">
+          <div class="text-[11px] text-text-muted" v-tooltip="$t('platform.cursor.autoAvailableHint')">{{ $t('platform.cursor.autoAvailable') }}</div>
+          <div class="text-sm font-semibold tabular-nums">{{ autoRemainingPercent }}%</div>
+        </div>
+        <div v-if="apiRemainingPercent !== null" class="rounded-md border border-border px-3 py-2">
+          <div class="text-[11px] text-text-muted" v-tooltip="$t('platform.cursor.apiAvailableHint')">{{ $t('platform.cursor.apiAvailable') }}</div>
+          <div class="text-sm font-semibold tabular-nums">{{ apiRemainingPercent }}%</div>
+        </div>
+        <div v-if="showGrokBot" class="rounded-md border border-border px-3 py-2">
+          <div class="text-[11px] text-text-muted" v-tooltip="$t('platform.cursor.grokBotAvailableHint')">{{ $t('platform.cursor.grokBotAvailable') }}</div>
+          <div class="text-sm font-semibold tabular-nums">{{ grokBotRemaining }}%</div>
+        </div>
+      </div>
     </div>
 
     <!-- Tab 切换区域 -->
@@ -138,6 +152,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
 import BaseModal from '../common/BaseModal.vue'
 import CursorUsageCharts from './CursorUsageCharts.vue'
+import { applyCursorUsageSummary } from '../../utils/cursorUsage'
+import { useCursorQuota } from '../../composables/useCursorQuota'
 
 const { t: $t } = useI18n()
 
@@ -168,6 +184,12 @@ const tabs = [
 
 const sessionToken = computed(() => props.account.token?.workos_cursor_session_token)
 const individualUsage = computed(() => props.account.individual_usage)
+const {
+  autoRemainingPercent,
+  apiRemainingPercent,
+  grokBotRemaining,
+  showGrokBot
+} = useCursorQuota(() => props.account)
 const isChartView = computed(() => activeTab.value === 'charts')
 const chartEvents = ref([])
 const chartAllData = ref(false)
@@ -382,13 +404,11 @@ const toggleChartAllData = () => {
 const fetchUsageSummary = async () => {
   if (!sessionToken.value) return
   try {
-    const summary = await invoke('cursor_get_usage_summary', { sessionToken: sessionToken.value })
-    props.account.membership_type = summary.membershipType || null
-    const usage = summary.individualUsage || {}
-    if (summary.billingCycleStart) usage.billingCycleStart = summary.billingCycleStart
-    if (summary.billingCycleEnd) usage.billingCycleEnd = summary.billingCycleEnd
-    props.account.individual_usage = Object.keys(usage).length > 0 ? usage : null
-    props.account.updated_at = Math.floor(Date.now() / 1000)
+    const summary = await invoke('cursor_get_usage_summary', {
+      sessionToken: sessionToken.value,
+      accessToken: props.account.token?.access_token || null
+    })
+    applyCursorUsageSummary(props.account, summary)
     await invoke('cursor_update_account', { account: props.account })
     emit('account-synced', props.account.id)
   } catch (e) {

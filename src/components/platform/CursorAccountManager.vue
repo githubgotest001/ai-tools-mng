@@ -154,7 +154,7 @@
                 </th>
                 <th class="th w-[60px]">{{ $t('platform.cursor.table.tag') }}</th>
                 <th class="th">{{ $t('platform.cursor.table.email') }}</th>
-                <th class="th w-[130px]">{{ $t('platform.cursor.table.usage') }}</th>
+                <th class="th w-[150px]">{{ $t('platform.cursor.table.usage') }}</th>
                 <th class="th w-[105px]">{{ $t('platform.cursor.table.expiry') }}</th>
                 <th class="th w-[100px]">{{ $t('platform.cursor.table.quota') }}</th>
                 <th class="th w-[80px] text-center">{{ $t('platform.cursor.table.actions') }}</th>
@@ -525,6 +525,7 @@ import SyncQueueModal from '../common/SyncQueueModal.vue'
 import CustomPathDialog from '../common/CustomPathDialog.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
 import { useStorageSync } from '@/composables/useStorageSync'
+import { applyCursorUsageSummary } from '@/utils/cursorUsage'
 
 const { t: $t } = useI18n()
 
@@ -870,13 +871,11 @@ const handleBatchRefreshQuota = async () => {
   let fail = 0
   for (const account of pageAccounts) {
     try {
-      const summary = await invoke('cursor_get_usage_summary', { sessionToken: account.token.workos_cursor_session_token })
-      account.membership_type = summary.membershipType || null
-      const usage = summary.individualUsage || {}
-      if (summary.billingCycleStart) usage.billingCycleStart = summary.billingCycleStart
-      if (summary.billingCycleEnd) usage.billingCycleEnd = summary.billingCycleEnd
-      account.individual_usage = Object.keys(usage).length > 0 ? usage : null
-      account.updated_at = Math.floor(Date.now() / 1000)
+      const summary = await invoke('cursor_get_usage_summary', {
+        sessionToken: account.token.workos_cursor_session_token,
+        accessToken: account.token?.access_token || null
+      })
+      applyCursorUsageSummary(account, summary)
       await invoke('cursor_update_account', { account })
       markItemUpsertById(account.id)
       success++
@@ -1005,13 +1004,11 @@ const handleRefreshQuota = async (accountId) => {
   }
   refreshingAccountId.value = accountId
   try {
-    const summary = await invoke('cursor_get_usage_summary', { sessionToken })
-    account.membership_type = summary.membershipType || null
-    const usage = summary.individualUsage || {}
-    if (summary.billingCycleStart) usage.billingCycleStart = summary.billingCycleStart
-    if (summary.billingCycleEnd) usage.billingCycleEnd = summary.billingCycleEnd
-    account.individual_usage = Object.keys(usage).length > 0 ? usage : null
-    account.updated_at = Math.floor(Date.now() / 1000)
+    const summary = await invoke('cursor_get_usage_summary', {
+      sessionToken,
+      accessToken: account.token?.access_token || null
+    })
+    applyCursorUsageSummary(account, summary)
     await invoke('cursor_update_account', { account })
     markItemUpsertById(accountId)
   } catch (e) {
