@@ -15,6 +15,7 @@ permissions:
 
 jobs:
   dispatch:
+    if: github.repository == 'cubezhao/ai-tools-mng'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.TAP_DISPATCH_TOKEN }}
