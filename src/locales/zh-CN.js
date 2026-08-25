@@ -1840,13 +1840,19 @@ export default {
       quotaLabel: '配额',
       searchPlaceholder: '搜索邮箱...',
       sortByQuota: '按配额排序',
+      sortByMembership: '按订阅计划',
+      sortByMembershipHint: '按套餐等级排序（free < pro < pro plus < ultra），升序低等级在前；未识别的计划排在最后，同等级按邮箱字典序',
+      sortByBillingCycleEnd: '按账期到期',
+      sortByBillingCycleEndHint: '按账期到期时间排序，升序=先到期的在前；无账期数据的账号排在最后',
       batchRefresh: '批量刷新',
       allAccountsMarkedForSync: '已将 {count} 个账号标记为待同步',
       filter: {
         all: '全部',
         available: '可用',
         low: '配额低',
-        forbidden: '已禁用'
+        forbidden: '已禁用',
+        membershipType: '会员类型（可多选）',
+        membershipMultiSelectHint: '可多选，选中的类型任一命中即显示；点「全部」清空筛选'
       },
       status: {
         current: '当前',

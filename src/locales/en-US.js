@@ -1847,13 +1847,19 @@ export default {
       quotaLabel: 'Quota',
       searchPlaceholder: 'Search email...',
       sortByQuota: 'Sort by Quota',
+      sortByMembership: 'By plan',
+      sortByMembershipHint: 'Sort by plan tier (free < pro < pro plus < ultra); ascending puts lower tiers first. Unrecognized plans go last, and accounts on the same tier are ordered by email.',
+      sortByBillingCycleEnd: 'By cycle end',
+      sortByBillingCycleEndHint: 'Sort by billing cycle end date; ascending puts the soonest to renew first. Accounts without cycle data go last.',
       batchRefresh: 'Batch refresh',
       allAccountsMarkedForSync: 'All {count} accounts marked for sync',
       filter: {
         all: 'All',
         available: 'Available',
         low: 'Low Quota',
-        forbidden: 'Forbidden'
+        forbidden: 'Forbidden',
+        membershipType: 'Plan (multi-select)',
+        membershipMultiSelectHint: 'Pick several plans — an account shows if it matches any of them. Click All to clear the filter.'
       },
       status: {
         current: 'Current',
