@@ -62,58 +62,29 @@
       </div>
     </td>
 
-    <!-- 可用额度 -->
+    <!-- 可用额度：一条主进度条 + 一行摘要 -->
     <td class="w-[150px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[12px] text-text-muted">
-      <div v-if="hasSessionToken && (showPlanQuota || totalRemainingPercent !== null || autoRemainingPercent !== null || apiRemainingPercent !== null || showGrokBot)" class="flex flex-col gap-1">
-        <div v-if="showPlanQuota" class="flex items-center gap-1">
-          <span class="w-7 shrink-0 text-text-muted/60" v-tooltip="planHint">{{ $t('platform.cursor.planShort') }}</span>
+      <div v-if="hasSessionToken && primaryQuota" class="flex flex-col gap-1">
+        <div class="flex items-center gap-1">
+          <span class="w-7 shrink-0 text-text-muted/60" v-tooltip="primaryQuotaHint">{{ $t(`platform.cursor.${primaryQuota.key}Short`) }}</span>
           <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
             <div class="h-full rounded transition-all"
-                 :class="getQuotaBarClass(planRemainingPercent)"
-                 :style="{ width: planRemainingPercent + '%' }">
+                 :class="getQuotaBarClass(primaryQuota.percent)"
+                 :style="{ width: primaryQuota.percent + '%' }">
             </div>
           </div>
-          <span class="text-[11px] font-medium tabular-nums w-7 text-right">{{ planRemainingPercent }}%</span>
+          <span class="text-[11px] font-medium tabular-nums w-7 text-right">{{ primaryQuota.percent }}%</span>
         </div>
-        <div v-if="totalRemainingPercent !== null" class="flex items-center gap-1">
-          <span class="w-7 shrink-0 text-text-muted/60" v-tooltip="$t('platform.cursor.totalAvailableHint')">{{ $t('platform.cursor.totalShort') }}</span>
-          <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
-            <div class="h-full rounded transition-all"
-                 :class="getQuotaBarClass(totalRemainingPercent)"
-                 :style="{ width: totalRemainingPercent + '%' }">
-            </div>
-          </div>
-          <span class="text-[11px] font-medium tabular-nums w-7 text-right">{{ totalRemainingPercent }}%</span>
-        </div>
-        <div v-if="autoRemainingPercent !== null" class="flex items-center gap-1">
-          <span class="w-7 shrink-0 text-text-muted/60" v-tooltip="$t('platform.cursor.autoAvailableHint')">{{ $t('platform.cursor.autoShort') }}</span>
-          <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
-            <div class="h-full rounded transition-all"
-                 :class="getQuotaBarClass(autoRemainingPercent)"
-                 :style="{ width: autoRemainingPercent + '%' }">
-            </div>
-          </div>
-          <span class="text-[11px] font-medium tabular-nums w-7 text-right">{{ autoRemainingPercent }}%</span>
-        </div>
-        <div v-if="apiRemainingPercent !== null" class="flex items-center gap-1">
-          <span class="w-7 shrink-0 text-text-muted/60" v-tooltip="$t('platform.cursor.apiAvailableHint')">{{ $t('platform.cursor.apiShort') }}</span>
-          <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
-            <div class="h-full rounded transition-all"
-                 :class="getQuotaBarClass(apiRemainingPercent)"
-                 :style="{ width: apiRemainingPercent + '%' }">
-            </div>
-          </div>
-          <span class="text-[11px] font-medium tabular-nums w-7 text-right">{{ apiRemainingPercent }}%</span>
-        </div>
-        <div v-if="showGrokBot" class="flex items-center gap-1">
-          <span class="w-7 shrink-0 text-text-muted/60" v-tooltip="grokBotHint">{{ $t('platform.cursor.grokBotShort') }}</span>
-          <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
-            <div class="h-full rounded transition-all"
-                 :class="getQuotaBarClass(grokBotRemaining)"
-                 :style="{ width: grokBotRemaining + '%' }">
-            </div>
-          </div>
-          <span class="text-[11px] font-medium tabular-nums w-7 text-right">{{ grokBotRemaining }}%</span>
+        <div v-if="secondaryQuotas.length" class="flex flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] tabular-nums whitespace-normal">
+          <span
+            v-for="item in secondaryQuotas"
+            :key="item.key"
+            class="whitespace-nowrap"
+            v-tooltip="secondaryQuotaHint(item)"
+          >
+            {{ $t(`platform.cursor.${item.key}Short`) }}
+            <span class="font-medium" :class="getQuotaTextClass(item.percent)">{{ item.percent }}%</span>
+          </span>
         </div>
       </div>
       <span v-else class="text-text-muted/50">-</span>
@@ -273,16 +244,12 @@ const emit = defineEmits(['switch', 'delete', 'select', 'account-updated', 'acco
 const hasSessionToken = computed(() => !!props.account.token?.workos_cursor_session_token)
 
 const {
-  planRemainingPercent,
   planSpend,
-  showPlanQuota,
-  totalRemainingPercent,
-  autoRemainingPercent,
-  apiRemainingPercent,
-  grokBotRemaining,
-  showGrokBot,
   grokBotResetLabel,
-  getQuotaBarClass
+  primaryQuota,
+  secondaryQuotas,
+  getQuotaBarClass,
+  getQuotaTextClass
 } = useCursorQuota(() => props.account)
 
 const planHint = computed(() => {
@@ -296,6 +263,19 @@ const grokBotHint = computed(() => {
     ? `${base} · ${$t('platform.cursor.grokBotResets', { date: grokBotResetLabel.value })}`
     : base
 })
+
+const primaryQuotaHint = computed(() => {
+  if (!primaryQuota.value) return ''
+  return primaryQuota.value.key === 'plan'
+    ? planHint.value
+    : $t('platform.cursor.totalAvailableHint')
+})
+
+// 每个百分比的 tooltip 先声明「剩余可用」口径，再接各池说明
+const secondaryQuotaHint = (item) => {
+  const hint = item.key === 'grokBot' ? grokBotHint.value : $t(`platform.cursor.${item.key}AvailableHint`)
+  return `${$t('platform.cursor.quotaRemainingHint')} · ${hint}`
+}
 
 const menuRef = ref(null)
 const showTagEditor = ref(false)

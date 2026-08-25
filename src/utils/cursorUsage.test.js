@@ -1,8 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
+// 账期展示用本地时区，测试固定 UTC 保证断言稳定
+process.env.TZ = 'UTC'
+
 import {
   applyCursorUsageSummary,
+  billingCycleRange,
+  getQuotaTextClass,
   grokBotRemainingPercent,
   planRemainingPercentFromCents,
   planSpendLabel,
@@ -100,6 +105,49 @@ test('Grok Bot 周额度按剩余比例换算', () => {
   assert.equal(grokBotRemainingPercent({ used: 25, limit: 100 }), 75)
   assert.equal(grokBotRemainingPercent({ remaining: 40, limit: 100 }), 40)
   assert.equal(grokBotRemainingPercent(null), null)
+})
+
+test('账期区间给出紧凑与完整两种格式，完整格式带续费时分', () => {
+  const range = billingCycleRange({
+    billingCycleStart: '2026-08-02T14:11:55.000Z',
+    billingCycleEnd: '2026-09-02T14:11:55.000Z'
+  })
+  assert.equal(range.short, '08/02 – 09/02')
+  assert.equal(range.full, '2026/08/02 14:11 – 2026/09/02 14:11')
+  assert.equal(range.hasTime, true)
+})
+
+test('账期起止都在 0 点视为只有日期，不补 00:00 噪音', () => {
+  const range = billingCycleRange({
+    billingCycleStart: '2026-08-02T00:00:00.000Z',
+    billingCycleEnd: '2026-09-02T00:00:00.000Z'
+  })
+  assert.equal(range.short, '08/02 – 09/02')
+  assert.equal(range.full, '2026/08/02 – 2026/09/02')
+  assert.equal(range.hasTime, false)
+})
+
+test('账期兼容 snake_case 旧数据，缺一端或非法则不展示', () => {
+  const range = billingCycleRange({
+    billing_cycle_start: '2026-08-02T14:11:55.000Z',
+    billing_cycle_end: '2026-09-02T14:11:55.000Z'
+  })
+  assert.equal(range.short, '08/02 – 09/02')
+
+  assert.equal(billingCycleRange(null), null)
+  assert.equal(billingCycleRange({}), null)
+  assert.equal(billingCycleRange({ billingCycleStart: '2026-08-02T14:11:55.000Z' }), null)
+  assert.equal(
+    billingCycleRange({ billingCycleStart: 'oops', billingCycleEnd: '2026-09-02T14:11:55.000Z' }),
+    null
+  )
+})
+
+test('摘要行文字仅在额度紧张时着色', () => {
+  assert.equal(getQuotaTextClass(96), 'text-text-muted')
+  assert.equal(getQuotaTextClass(25), 'text-warning')
+  assert.equal(getQuotaTextClass(5), 'text-danger')
+  assert.equal(getQuotaTextClass(null), 'text-text-muted')
 })
 
 test('写回用量摘要时保留上一次的 Grok Bot 周额度', () => {
