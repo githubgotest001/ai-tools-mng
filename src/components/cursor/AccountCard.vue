@@ -30,6 +30,18 @@
       >
         <span>{{ showRealEmail ? account.email : maskedEmail }}</span>
       </div>
+
+      <!-- Session 失效标识：套餐仍是上次成功刷新的数据，这里提示数据已不再更新 -->
+      <span
+        v-if="sessionInvalid"
+        class="badge badge--sm badge--danger-tech shrink-0"
+        v-tooltip="sessionInvalidTooltip"
+      >
+        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+        </svg>
+        {{ $t('platform.cursor.sessionInvalid') }}
+      </span>
     </div>
 
     <!-- 右上角状态徽章 -->
@@ -303,6 +315,7 @@ import TagEditorModal from '../token/TagEditorModal.vue'
 import CursorUsageModal from './CursorUsageModal.vue'
 import CursorSessionsModal from './CursorSessionsModal.vue'
 import { useCursorQuota } from '../../composables/useCursorQuota'
+import { isCursorSessionInvalid } from '../../utils/cursorUsage'
 
 const { t: $t } = useI18n()
 
@@ -373,6 +386,16 @@ const maskedEmail = computed(() => {
   const email = props.account.email
   if (!email || !email.includes('@')) return email
   return 'hello@cursor.com'
+})
+
+const sessionInvalid = computed(() => isCursorSessionInvalid(props.account))
+
+const sessionInvalidTooltip = computed(() => {
+  const hint = $t('platform.cursor.sessionInvalidHint')
+  const at = props.account.session_invalid_at
+  return at
+    ? `${hint} · ${$t('platform.cursor.sessionInvalidAt', { time: formatDate(at) })}`
+    : hint
 })
 
 const statusClass = computed(() => {
