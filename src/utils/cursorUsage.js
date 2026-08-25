@@ -128,7 +128,11 @@ function parseIsoDate(value) {
 /**
  * 套餐账期起止（usage-summary 的 billingCycleStart / billingCycleEnd）。
  *
- * 返回 `{ short: '08/02 – 09/02', full: '2026/08/02 – 2026/09/02' }`；
+ * 返回 `{ short, full, hasTime }`：
+ * - short：卡片内联的紧凑日期 `08/02 – 09/02`，不带时分以免挤爆一行；
+ * - full：tooltip 用的完整格式。官方时间戳带时分（续费的精确时刻），
+ *   所以 full 形如 `2026/08/02 14:11 – 2026/09/02 14:11`；起止都落在
+ *   本地 0 点视为只有日期的旧数据，省掉 `00:00` 噪音。
  * 任一端缺失或非法时返回 null，避免渲染出残缺区间。
  * 账号数据可能来自 Rust 序列化（camelCase）或旧数据（snake_case），两种都认。
  */
@@ -137,10 +141,15 @@ export function billingCycleRange(usage) {
   const end = parseIsoDate(usage?.billingCycleEnd || usage?.billing_cycle_end)
   if (!start || !end) return null
   const pad = (n) => String(n).padStart(2, '0')
+  const hasTime = [start, end].some((d) => d.getHours() !== 0 || d.getMinutes() !== 0)
   const short = (d) => `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`
-  const full = (d) => `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`
+  const full = (d) => {
+    const date = `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`
+    return hasTime ? `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}` : date
+  }
   return {
     short: `${short(start)} – ${short(end)}`,
-    full: `${full(start)} – ${full(end)}`
+    full: `${full(start)} – ${full(end)}`,
+    hasTime
   }
 }

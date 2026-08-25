@@ -107,13 +107,24 @@ test('Grok Bot 周额度按剩余比例换算', () => {
   assert.equal(grokBotRemainingPercent(null), null)
 })
 
-test('账期区间给出紧凑与完整两种格式', () => {
+test('账期区间给出紧凑与完整两种格式，完整格式带续费时分', () => {
   const range = billingCycleRange({
     billingCycleStart: '2026-08-02T14:11:55.000Z',
     billingCycleEnd: '2026-09-02T14:11:55.000Z'
   })
   assert.equal(range.short, '08/02 – 09/02')
+  assert.equal(range.full, '2026/08/02 14:11 – 2026/09/02 14:11')
+  assert.equal(range.hasTime, true)
+})
+
+test('账期起止都在 0 点视为只有日期，不补 00:00 噪音', () => {
+  const range = billingCycleRange({
+    billingCycleStart: '2026-08-02T00:00:00.000Z',
+    billingCycleEnd: '2026-09-02T00:00:00.000Z'
+  })
+  assert.equal(range.short, '08/02 – 09/02')
   assert.equal(range.full, '2026/08/02 – 2026/09/02')
+  assert.equal(range.hasTime, false)
 })
 
 test('账期兼容 snake_case 旧数据，缺一端或非法则不展示', () => {

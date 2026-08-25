@@ -199,13 +199,13 @@
         </div>
       </div>
 
-      <!-- 其余额度一行摘要 + 查看用量入口 -->
+      <!-- 其余额度一行摘要（口径为剩余可用）+ 查看用量入口 -->
       <div v-if="hasSessionToken" class="flex items-center gap-1 min-h-6">
         <div class="flex items-center gap-1.5 w-[90px] shrink-0 text-text-muted text-xs">
           <svg class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="currentColor">
             <path d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z"/>
           </svg>
-          <span>{{ $t('platform.cursor.quotaLabel') }}</span>
+          <span v-tooltip="$t('platform.cursor.quotaRemainingHint')">{{ $t('platform.cursor.quotaRemainingLabel') }}</span>
         </div>
         <div class="flex-1 flex items-center flex-wrap gap-x-2 gap-y-0.5 min-w-0">
           <span
@@ -355,9 +355,10 @@ const primaryQuotaHint = computed(() => {
     : $t('platform.cursor.totalAvailableHint')
 })
 
+// 每个百分比的 tooltip 先声明「剩余可用」口径，再接各池说明
 const secondaryQuotaHint = (item) => {
-  if (item.key === 'grokBot') return grokBotHint.value
-  return $t(`platform.cursor.${item.key}AvailableHint`)
+  const hint = item.key === 'grokBot' ? grokBotHint.value : $t(`platform.cursor.${item.key}AvailableHint`)
+  return `${$t('platform.cursor.quotaRemainingHint')} · ${hint}`
 }
 
 const billingCycleTooltip = computed(() =>

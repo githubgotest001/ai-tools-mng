@@ -271,9 +271,10 @@ const primaryQuotaHint = computed(() => {
     : $t('platform.cursor.totalAvailableHint')
 })
 
+// 每个百分比的 tooltip 先声明「剩余可用」口径，再接各池说明
 const secondaryQuotaHint = (item) => {
-  if (item.key === 'grokBot') return grokBotHint.value
-  return $t(`platform.cursor.${item.key}AvailableHint`)
+  const hint = item.key === 'grokBot' ? grokBotHint.value : $t(`platform.cursor.${item.key}AvailableHint`)
+  return `${$t('platform.cursor.quotaRemainingHint')} · ${hint}`
 }
 
 const menuRef = ref(null)
