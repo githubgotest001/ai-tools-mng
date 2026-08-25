@@ -146,16 +146,16 @@
         </div>
       </div>
 
-      <!-- 订阅计划类型 + 账期 -->
-      <div v-if="account.membership_type || billingCycle" class="flex items-center gap-1 min-h-6">
+      <!-- 订阅计划 -->
+      <div v-if="account.membership_type" class="flex items-center gap-1 min-h-6">
         <div class="flex items-center gap-1.5 w-[90px] shrink-0 text-text-muted text-xs">
           <svg class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
           </svg>
           <span>{{ $t('platform.cursor.membershipType') }}</span>
         </div>
-        <div class="flex-1 flex items-center gap-1.5 min-w-0">
-          <span v-if="account.membership_type" :class="getMembershipBadgeClass(account.membership_type)">
+        <div class="flex-1 min-w-0">
+          <span :class="getMembershipBadgeClass(account.membership_type)">
             <svg v-if="account.membership_type?.toLowerCase() === 'ultra'" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19 3H5L2 9l10 12L22 9l-3-6zM9.62 8l1.5-3h1.76l1.5 3H9.62zM11 10v6.68L5.44 10H11zm2 0h5.56L13 16.68V10zm6.26-2h-2.65l-1.5-3h2.65l1.5 3zM6.24 5h2.65l-1.5 3H4.74l1.5-3z"/>
             </svg>
@@ -167,59 +167,49 @@
             </svg>
             {{ account.membership_type }}
           </span>
-          <!-- 套餐订阅账期，如「账期 08/02 – 09/02」 -->
-          <span
-            v-if="billingCycle"
-            class="text-[11px] text-text-muted tabular-nums truncate"
-            v-tooltip="billingCycleTooltip"
-          >
-            {{ $t('platform.cursor.billingCycleShort') }} {{ billingCycle.short }}
-          </span>
         </div>
       </div>
 
-      <!-- 核心额度：一条主进度条（优先套餐口径，缺失时退回 Total 池） -->
-      <div v-if="primaryQuota && hasSessionToken" class="flex items-center gap-1 min-h-6">
+      <!-- 账期：独立一行避免截断；悬停显示含时分的完整区间 -->
+      <div v-if="billingCycle" class="flex items-center gap-1 min-h-6">
         <div class="flex items-center gap-1.5 w-[90px] shrink-0 text-text-muted text-xs">
           <svg class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 12h2v5H7zm4-3h2v8h-2zm4-3h2v11h-2z"/>
+            <path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V3h-2zm3 18H5V8h14v11z"/>
           </svg>
-          <span v-tooltip="primaryQuotaHint">{{ $t(`platform.cursor.${primaryQuota.key}Available`) }}</span>
+          <span>{{ $t('platform.cursor.billingCycleShort') }}</span>
         </div>
-        <div class="flex-1 flex items-center gap-1">
-          <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
-            <div class="h-full rounded transition-all"
-                 :class="getQuotaBarClass(primaryQuota.percent)"
-                 :style="{ width: primaryQuota.percent + '%' }">
-            </div>
+        <div class="flex-1 text-[13px] text-text-muted tabular-nums" v-tooltip="billingCycleTooltip">
+          {{ billingCycle.short }}
+        </div>
+      </div>
+
+      <!-- Auto / API / Bot 分池剩余进度条（无数据的池不渲染） -->
+      <template v-if="hasSessionToken">
+        <div v-for="item in quotaBars" :key="item.key" class="flex items-center gap-1 min-h-6">
+          <div class="flex items-center gap-1.5 w-[90px] shrink-0 text-text-muted text-xs">
+            <svg class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 12h2v5H7zm4-3h2v8h-2zm4-3h2v11h-2z"/>
+            </svg>
+            <span v-tooltip="quotaBarHint(item)">{{ $t(`platform.cursor.${item.key}Short`) }}</span>
           </div>
-          <span class="text-[11px] font-medium tabular-nums text-text-muted w-8 text-right">
-            {{ primaryQuota.percent }}%
-          </span>
+          <div class="flex-1 flex items-center gap-1">
+            <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
+              <div class="h-full rounded transition-all"
+                   :class="getQuotaBarClass(item.percent)"
+                   :style="{ width: item.percent + '%' }">
+              </div>
+            </div>
+            <span class="text-[11px] font-medium tabular-nums w-8 text-right" :class="getQuotaTextClass(item.percent)">
+              {{ item.percent }}%
+            </span>
+          </div>
         </div>
-      </div>
 
-      <!-- 其余额度一行摘要（口径为剩余可用）+ 查看用量入口 -->
-      <div v-if="hasSessionToken" class="flex items-center gap-1 min-h-6">
-        <div class="flex items-center gap-1.5 w-[90px] shrink-0 text-text-muted text-xs">
-          <svg class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z"/>
-          </svg>
-          <span v-tooltip="$t('platform.cursor.quotaRemainingHint')">{{ $t('platform.cursor.quotaRemainingLabel') }}</span>
-        </div>
-        <div class="flex-1 flex items-center flex-wrap gap-x-2 gap-y-0.5 min-w-0">
-          <span
-            v-for="item in secondaryQuotas"
-            :key="item.key"
-            class="whitespace-nowrap text-[11px] text-text-muted tabular-nums"
-            v-tooltip="secondaryQuotaHint(item)"
-          >
-            {{ $t(`platform.cursor.${item.key}Short`) }}
-            <span class="font-medium" :class="getQuotaTextClass(item.percent)">{{ item.percent }}%</span>
-          </span>
+        <!-- 查看用量入口：额度区底部右对齐 -->
+        <div class="flex items-center justify-end min-h-6">
           <button
             @click.stop="showUsageModal = true"
-            class="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-xs text-accent bg-accent/10 border border-accent/30 rounded hover:bg-accent/20 transition-colors cursor-pointer shrink-0"
+            class="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-accent bg-accent/10 border border-accent/30 rounded hover:bg-accent/20 transition-colors cursor-pointer"
           >
             <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
               <path d="M3 3h2v18H3V3zm16 8h2v10h-2V11zm-8 4h2v6h-2v-6zm4-8h2v14h-2V7zm-8 6h2v8H7v-8z"/>
@@ -227,7 +217,7 @@
             {{ $t('cursorUsage.viewUsage') }}
           </button>
         </div>
-      </div>
+      </template>
 
       <!-- 标签 -->
       <div class="flex items-center gap-1 min-h-6">
@@ -327,19 +317,12 @@ const getMembershipBadgeClass = (type) => {
 const hasSessionToken = computed(() => !!props.account.token?.workos_cursor_session_token)
 
 const {
-  planSpend,
   grokBotResetLabel,
-  primaryQuota,
-  secondaryQuotas,
+  quotaBars,
   billingCycle,
   getQuotaBarClass,
   getQuotaTextClass
 } = useCursorQuota(() => props.account)
-
-const planHint = computed(() => {
-  const base = $t('platform.cursor.planAvailableHint')
-  return planSpend.value ? `${base} · ${planSpend.value}` : base
-})
 
 const grokBotHint = computed(() => {
   const base = $t('platform.cursor.grokBotAvailableHint')
@@ -348,15 +331,8 @@ const grokBotHint = computed(() => {
     : base
 })
 
-const primaryQuotaHint = computed(() => {
-  if (!primaryQuota.value) return ''
-  return primaryQuota.value.key === 'plan'
-    ? planHint.value
-    : $t('platform.cursor.totalAvailableHint')
-})
-
-// 每个百分比的 tooltip 先声明「剩余可用」口径，再接各池说明
-const secondaryQuotaHint = (item) => {
+// 每条进度条的 tooltip 先声明「剩余可用」口径，再接各池说明
+const quotaBarHint = (item) => {
   const hint = item.key === 'grokBot' ? grokBotHint.value : $t(`platform.cursor.${item.key}AvailableHint`)
   return `${$t('platform.cursor.quotaRemainingHint')} · ${hint}`
 }
