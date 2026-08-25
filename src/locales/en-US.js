@@ -1844,6 +1844,7 @@ export default {
       apiAvailableHint: 'Matches the Other Models pool (third-party models) on the Spending page. This pool was not enlarged by the 2026-08-24 change, so it is usually the one that runs out first.',
       grokBotAvailableHint: 'Remaining Grok Bot weekly allowance, separate from the monthly Auto / API pools.',
       grokBotResets: 'Resets {date}',
+      billingCycleShort: 'Cycle',
       searchPlaceholder: 'Search email...',
       sortByQuota: 'Sort by Quota',
       batchRefresh: 'Batch refresh',

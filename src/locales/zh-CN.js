@@ -1837,6 +1837,7 @@ export default {
       apiAvailableHint: '对应 Spending 页 Other Models 池（第三方模型）。该池未随 2026-08-24 的调整扩容，先耗尽的通常是它',
       grokBotAvailableHint: 'Grok Bot 本周剩余额度，与 Auto / API 月度池分开计算',
       grokBotResets: '重置 {date}',
+      billingCycleShort: '账期',
       searchPlaceholder: '搜索邮箱...',
       sortByQuota: '按配额排序',
       batchRefresh: '批量刷新',

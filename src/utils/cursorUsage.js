@@ -110,3 +110,37 @@ export function getQuotaBarClass(percent) {
   if (percent < 30) return 'bg-warning'
   return 'bg-success'
 }
+
+/** 摘要行里百分比数字的着色：额度紧张才提示，健康时保持安静 */
+export function getQuotaTextClass(percent) {
+  if (percent === null || percent === undefined) return 'text-text-muted'
+  if (percent < 10) return 'text-danger'
+  if (percent < 30) return 'text-warning'
+  return 'text-text-muted'
+}
+
+function parseIsoDate(value) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/**
+ * 套餐账期起止（usage-summary 的 billingCycleStart / billingCycleEnd）。
+ *
+ * 返回 `{ short: '08/02 – 09/02', full: '2026/08/02 – 2026/09/02' }`；
+ * 任一端缺失或非法时返回 null，避免渲染出残缺区间。
+ * 账号数据可能来自 Rust 序列化（camelCase）或旧数据（snake_case），两种都认。
+ */
+export function billingCycleRange(usage) {
+  const start = parseIsoDate(usage?.billingCycleStart || usage?.billing_cycle_start)
+  const end = parseIsoDate(usage?.billingCycleEnd || usage?.billing_cycle_end)
+  if (!start || !end) return null
+  const pad = (n) => String(n).padStart(2, '0')
+  const short = (d) => `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`
+  const full = (d) => `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`
+  return {
+    short: `${short(start)} – ${short(end)}`,
+    full: `${full(start)} – ${full(end)}`
+  }
+}
