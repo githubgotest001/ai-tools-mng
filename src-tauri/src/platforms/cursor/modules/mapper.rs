@@ -34,6 +34,7 @@ impl AccountDbMapper<Account> for CursorAccountMapper {
             machine_info,
             membership_type: row.get(19),
             individual_usage,
+            session_invalid_at: row.get(21),
             disabled: row.get(11),
             disabled_reason: row.get(12),
             disabled_at: row.get(13),
@@ -50,7 +51,7 @@ impl AccountDbMapper<Account> for CursorAccountMapper {
          workos_cursor_session_token, session_expiry_timestamp, \
          tag, tag_color, disabled, disabled_reason, disabled_at, \
          created_at, last_used, updated_at, version, machine_info, \
-         membership_type, individual_usage"
+         membership_type, individual_usage, session_invalid_at"
     }
 
     fn insert_sql() -> &'static str {
@@ -60,8 +61,8 @@ impl AccountDbMapper<Account> for CursorAccountMapper {
              workos_cursor_session_token, session_expiry_timestamp,
              tag, tag_color, disabled, disabled_reason, disabled_at, created_at,
              last_used, updated_at, version, deleted, machine_info,
-             membership_type, individual_usage)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+             membership_type, individual_usage, session_invalid_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
         ON CONFLICT (id) DO UPDATE SET
             email = EXCLUDED.email,
             name = EXCLUDED.name,
@@ -82,7 +83,8 @@ impl AccountDbMapper<Account> for CursorAccountMapper {
             deleted = EXCLUDED.deleted,
             machine_info = EXCLUDED.machine_info,
             membership_type = EXCLUDED.membership_type,
-            individual_usage = EXCLUDED.individual_usage
+            individual_usage = EXCLUDED.individual_usage,
+            session_invalid_at = EXCLUDED.session_invalid_at
         "#
     }
 
@@ -125,6 +127,7 @@ impl AccountDbMapper<Account> for CursorAccountMapper {
             Box::new(machine_info_json),
             Box::new(account.membership_type.clone()),
             Box::new(individual_usage_json),
+            Box::new(account.session_invalid_at),
         ]
     }
 }

@@ -8,9 +8,36 @@ export function isCursorSessionExpiredError(error) {
   return /session expired|http 401|http 403/i.test(text)
 }
 
+/** 账号当前是否被标记为 session 失效（以最近一次刷新的 401/403 结论为准） */
+export function isCursorSessionInvalid(account) {
+  return !!account?.session_invalid_at
+}
+
+/**
+ * 标记账号 session 失效，返回是否有改动（无改动就不必再写库）。
+ * 时间戳同时用于 UI 显示「什么时候确认失效的」。
+ */
+export function markCursorSessionInvalid(account) {
+  if (!account || account.session_invalid_at) return false
+  account.session_invalid_at = Math.floor(Date.now() / 1000)
+  account.updated_at = account.session_invalid_at
+  return true
+}
+
+/** 清除 session 失效标记，返回是否有改动 */
+export function clearCursorSessionInvalid(account) {
+  if (!account?.session_invalid_at) return false
+  account.session_invalid_at = null
+  account.updated_at = Math.floor(Date.now() / 1000)
+  return true
+}
+
 /** 将 usage-summary 写回账号，并保留上次已拉到的 Grok Bot 周额度 */
 export function applyCursorUsageSummary(account, summary) {
   if (!account || !summary) return account
+
+  // 能拿到摘要说明 session 还有效，顺手清掉上次的失效标记
+  clearCursorSessionInvalid(account)
 
   // 只认非空字符串：摘要缺 membershipType 时保留账号原有套餐，
   // 免得一次异常响应把 Ultra/Pro 抹成别的值

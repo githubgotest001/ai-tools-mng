@@ -541,7 +541,11 @@ import SyncQueueModal from '../common/SyncQueueModal.vue'
 import CustomPathDialog from '../common/CustomPathDialog.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
 import { useStorageSync } from '@/composables/useStorageSync'
-import { applyCursorUsageSummary, isCursorSessionExpiredError } from '@/utils/cursorUsage'
+import {
+  applyCursorUsageSummary,
+  isCursorSessionExpiredError,
+  markCursorSessionInvalid
+} from '@/utils/cursorUsage'
 import {
   compareByBillingCycleEnd,
   compareByMembership,
@@ -892,6 +896,17 @@ const handleMachineIdOptionClose = () => {
   pendingSwitchAccount.value = null
 }
 
+// 把 session 失效标记落库，卡片/表格据此显示「Session 失效」徽章
+const persistSessionInvalid = async (account) => {
+  if (!markCursorSessionInvalid(account)) return
+  try {
+    await invoke('cursor_update_account', { account })
+    markItemUpsertById(account.id)
+  } catch (error) {
+    console.error('Failed to persist session invalid flag:', error)
+  }
+}
+
 const handleBatchRefreshQuota = async () => {
   const pageAccounts = paginatedAccounts.value.filter(a => a.token?.workos_cursor_session_token)
   if (pageAccounts.length === 0) {
@@ -916,7 +931,10 @@ const handleBatchRefreshQuota = async () => {
       // 失败的账号整个跳过，保留它原有的套餐与用量
       console.error(`Failed to refresh quota for ${account.email}:`, e)
       fail++
-      if (isCursorSessionExpiredError(e)) expired++
+      if (isCursorSessionExpiredError(e)) {
+        expired++
+        await persistSessionInvalid(account)
+      }
     }
   }
   isRefreshing.value = false
@@ -1074,11 +1092,12 @@ const handleRefreshQuota = async (accountId) => {
   } catch (e) {
     // 失败时不写回任何摘要，账号原有 membership_type 保持不变
     console.error('Failed to refresh quota:', e)
-    window.$notify?.error(
-      isCursorSessionExpiredError(e)
-        ? $t('platform.cursor.messages.sessionExpired')
-        : $t('platform.cursor.messages.refreshFailed', { error: e?.message || e })
-    )
+    if (isCursorSessionExpiredError(e)) {
+      await persistSessionInvalid(account)
+      window.$notify?.error($t('platform.cursor.messages.sessionExpired'))
+    } else {
+      window.$notify?.error($t('platform.cursor.messages.refreshFailed', { error: e?.message || e }))
+    }
   } finally {
     refreshingAccountId.value = null
   }

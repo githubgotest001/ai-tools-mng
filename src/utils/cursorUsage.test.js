@@ -7,9 +7,12 @@ process.env.TZ = 'UTC'
 import {
   applyCursorUsageSummary,
   billingCycleRange,
+  clearCursorSessionInvalid,
   getQuotaTextClass,
   grokBotRemainingPercent,
   isCursorSessionExpiredError,
+  isCursorSessionInvalid,
+  markCursorSessionInvalid,
   planRemainingPercentFromCents,
   planSpendLabel,
   remainingPercentFromUsed
@@ -177,6 +180,33 @@ test('摘要缺少 membershipType 时保留账号原有套餐', () => {
   assert.equal(account.membership_type, 'ultra')
 
   applyCursorUsageSummary(account, null)
+  assert.equal(account.membership_type, 'ultra')
+})
+
+test('标记 session 失效只在首次写入，重复标记不改时间戳', () => {
+  const account = { membership_type: 'pro' }
+
+  assert.equal(isCursorSessionInvalid(account), false)
+  assert.equal(markCursorSessionInvalid(account), true)
+  assert.equal(isCursorSessionInvalid(account), true)
+  assert.equal(account.membership_type, 'pro')
+
+  const firstSeen = account.session_invalid_at
+  assert.equal(markCursorSessionInvalid(account), false)
+  assert.equal(account.session_invalid_at, firstSeen)
+
+  assert.equal(clearCursorSessionInvalid(account), true)
+  assert.equal(isCursorSessionInvalid(account), false)
+  assert.equal(clearCursorSessionInvalid(account), false)
+})
+
+test('刷新成功写回摘要时清除 session 失效标记', () => {
+  const account = { membership_type: 'pro', session_invalid_at: 1750000000 }
+
+  applyCursorUsageSummary(account, { membershipType: 'ultra' })
+
+  assert.equal(account.session_invalid_at, null)
+  assert.equal(isCursorSessionInvalid(account), false)
   assert.equal(account.membership_type, 'ultra')
 })
 
