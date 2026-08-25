@@ -1373,6 +1373,7 @@ export default {
   cursorUsage: {
     title: 'Usage Details',
     viewUsage: 'View Usage Details',
+    viewUsageShort: 'View Usage',
     membershipType: 'Membership',
     totalInputTokens: 'Input Tokens',
     totalOutputTokens: 'Output Tokens',

@@ -205,8 +205,8 @@
           </div>
         </div>
 
-        <!-- 查看用量入口：额度区底部右对齐 -->
-        <div class="flex items-center justify-end min-h-6">
+        <!-- 查看用量入口：额度区底部居中 -->
+        <div class="flex items-center justify-center min-h-6">
           <button
             @click.stop="showUsageModal = true"
             class="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-accent bg-accent/10 border border-accent/30 rounded hover:bg-accent/20 transition-colors cursor-pointer"

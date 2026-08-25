@@ -1375,6 +1375,7 @@ export default {
   cursorUsage: {
     title: '使用详情',
     viewUsage: '查看用量详情',
+    viewUsageShort: '查看用量',
     membershipType: '会员类型',
     totalInputTokens: '输入 Tokens',
     totalOutputTokens: '输出 Tokens',
