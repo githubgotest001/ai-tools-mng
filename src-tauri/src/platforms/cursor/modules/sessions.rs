@@ -376,6 +376,38 @@ mod tests {
     }
 
     #[test]
+    fn serializes_the_keys_the_modal_reads() {
+        let raw = serde_json::json!({
+            "id": "s1",
+            "type": "SESSION_TYPE_CLIENT",
+            "ip_address": "203.0.113.7",
+            "location": "Tokyo, JP",
+            "device_name": "Cursor on macOS",
+            "last_active_at": "2026-08-25T06:00:00Z",
+            "created_at": "2026-08-01T06:00:00Z"
+        });
+        let list = CursorSessionList {
+            sessions: vec![normalize_session(&raw, None).unwrap()],
+        };
+
+        let json = serde_json::to_value(&list).unwrap();
+        let session = &json["sessions"][0];
+        for key in [
+            "id",
+            "sessionType",
+            "ipAddress",
+            "location",
+            "device",
+            "lastActiveAt",
+            "createdAt",
+            "isCurrent",
+            "raw",
+        ] {
+            assert!(session.get(key).is_some(), "missing key {key}");
+        }
+    }
+
+    #[test]
     fn extracts_error_message() {
         let body = r#"{"error":{"message":"not_authenticated"}}"#;
         assert_eq!(error_message(body).as_deref(), Some("not_authenticated"));
