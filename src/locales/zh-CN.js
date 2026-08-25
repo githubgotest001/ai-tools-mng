@@ -1996,6 +1996,7 @@ export default {
         switchFailed: '切换失败: {error}',
         refreshSuccess: '配额刷新成功',
         refreshFailed: '刷新配额失败: {error}',
+        sessionExpired: 'Session 已失效，请重新获取 Token（套餐信息保持不变）',
         addSuccess: '账号添加成功',
         addFailed: '添加账号失败: {error}',
         deleteConfirm: '确定要删除这个账号吗？',

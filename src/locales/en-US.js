@@ -2003,6 +2003,7 @@ export default {
         switchFailed: 'Switch failed: {error}',
         refreshSuccess: 'Quota refreshed successfully',
         refreshFailed: 'Refresh quota failed: {error}',
+        sessionExpired: 'Session expired, please re-add the token (plan info left unchanged)',
         addSuccess: 'Account added successfully',
         addFailed: 'Add account failed: {error}',
         deleteConfirm: 'Are you sure you want to delete this account?',

@@ -276,6 +276,26 @@ pub async fn get_user_info(session_token: &str) -> Result<CursorUserInfo, String
     })
 }
 
+/// 把 usage-summary 的失败状态翻成可读错误。
+///
+/// 这里必须报错而不是回退成 free 摘要：前端会把 membershipType 写回账号并
+/// 持久化，一次 401 就能把官网的 Ultra/Pro 账号在本地改成 Free。
+fn usage_summary_error(status: u16, body: &str) -> String {
+    let detail: String = body.trim().chars().take(200).collect();
+    let suffix = if detail.is_empty() {
+        String::new()
+    } else {
+        format!(": {}", detail)
+    };
+
+    match status {
+        401 | 403 => format!("Session expired (HTTP {}){}", status, suffix),
+        429 => format!("Usage summary rate limited (HTTP 429){}", suffix),
+        500..=599 => format!("Cursor server error (HTTP {}){}", status, suffix),
+        _ => format!("Failed to fetch usage summary (HTTP {}){}", status, suffix),
+    }
+}
+
 /// 获取用量摘要（使用 session_token + Cookie 认证）
 ///
 /// `access_token` 可选，保留兼容；Grok Bot 周额度走 session Cookie 的 Sand 接口。
@@ -297,39 +317,30 @@ pub async fn get_usage_summary(
         .await
         .map_err(|e| format!("Usage summary request failed: {}", e))?;
 
-    let status = response.status();
-    let usage_ok = status.is_success();
+    let status = response.status().as_u16();
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
 
-    let mut summary = if usage_ok {
-        let body = response
-            .text()
-            .await
-            .map_err(|e| format!("Failed to read response: {}", e))?;
+    if !(200..300).contains(&status) {
+        return Err(usage_summary_error(status, &body));
+    }
 
-        let raw: serde_json::Value = serde_json::from_str(&body)
-            .map_err(|e| format!("Failed to parse usage summary json: {}", e))?;
-        let mut parsed = serde_json::from_value::<UsageSummary>(raw.clone())
-            .map_err(|e| format!("Failed to parse usage summary: {}", e))?;
+    let raw: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| format!("Failed to parse usage summary json: {}", e))?;
+    let mut summary = serde_json::from_value::<UsageSummary>(raw.clone())
+        .map_err(|e| format!("Failed to parse usage summary: {}", e))?;
 
-        if !super::grok_bot::has_grok_bot_meter(&parsed) {
-            if let Some(bot) = super::grok_bot::extract_from_value(&raw) {
-                super::grok_bot::attach_grok_bot(&mut parsed, bot);
-            }
+    if !super::grok_bot::has_grok_bot_meter(&summary) {
+        if let Some(bot) = super::grok_bot::extract_from_value(&raw) {
+            super::grok_bot::attach_grok_bot(&mut summary, bot);
         }
-        parsed
-    } else {
-        UsageSummary {
-            membership_type: Some("free".to_string()),
-            individual_usage: None,
-            billing_cycle_start: None,
-            billing_cycle_end: None,
-        }
-    };
+    }
 
     // usage-summary 不含 Grok Bot；仪表盘走 get-sand-usage-status。
     // 不按套餐门控：Pro 账号若链接了 SuperGrok 也会有周额度。
-    // usage-summary 失败时 session 多半也过期，不必再打 Sand。
-    if usage_ok && !super::grok_bot::has_grok_bot_meter(&summary) {
+    if !super::grok_bot::has_grok_bot_meter(&summary) {
         if let Some(bot) = super::grok_bot::fetch_grok_bot_usage(session_token).await {
             super::grok_bot::attach_grok_bot(&mut summary, bot);
         }
@@ -789,5 +800,41 @@ mod tests {
         assert_eq!(breakdown.included, None);
         assert_eq!(breakdown.bonus, Some(0.0));
         assert_eq!(breakdown.total, None);
+    }
+
+    #[test]
+    fn auth_failure_reports_session_expired() {
+        for status in [401u16, 403] {
+            let message = usage_summary_error(status, "{\"error\":\"Unauthorized\"}");
+            assert!(message.starts_with("Session expired"), "{}", message);
+            assert!(message.contains(&status.to_string()), "{}", message);
+            // 绝不能悄悄变成 free：那会被前端写回账号覆盖真实套餐
+            assert!(!message.contains("free"), "{}", message);
+        }
+    }
+
+    #[test]
+    fn other_failures_keep_status_readable() {
+        assert!(usage_summary_error(500, "").starts_with("Cursor server error (HTTP 500)"));
+        assert!(usage_summary_error(503, "").starts_with("Cursor server error (HTTP 503)"));
+        assert!(usage_summary_error(429, "").starts_with("Usage summary rate limited"));
+        assert!(
+            usage_summary_error(404, "").starts_with("Failed to fetch usage summary (HTTP 404)")
+        );
+    }
+
+    #[test]
+    fn error_body_is_trimmed_and_truncated() {
+        assert_eq!(
+            usage_summary_error(500, "   "),
+            "Cursor server error (HTTP 500)"
+        );
+
+        let long_body = "x".repeat(500);
+        let message = usage_summary_error(500, &long_body);
+        assert_eq!(
+            message.len(),
+            "Cursor server error (HTTP 500): ".len() + 200
+        );
     }
 }
