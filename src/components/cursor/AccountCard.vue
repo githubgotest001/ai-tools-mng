@@ -205,17 +205,25 @@
           </div>
         </div>
 
-        <!-- 查看用量入口：额度区底部居中 -->
-        <div class="flex items-center justify-center min-h-6">
-          <button
-            @click.stop="showUsageModal = true"
-            class="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-accent bg-accent/10 border border-accent/30 rounded hover:bg-accent/20 transition-colors cursor-pointer"
-          >
-            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 3h2v18H3V3zm16 8h2v10h-2V11zm-8 4h2v6h-2v-6zm4-8h2v14h-2V7zm-8 6h2v8H7v-8z"/>
+        <!-- 查看用量入口：与其它属性行一致，左侧配额 label + 右侧按钮 -->
+        <div class="flex items-center gap-1 min-h-6">
+          <div class="flex items-center gap-1.5 w-[90px] shrink-0 text-text-muted text-xs">
+            <svg class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 12h2v5H7zm4-3h2v8h-2zm4-3h2v11h-2z"/>
             </svg>
-            {{ $t('cursorUsage.viewUsage') }}
-          </button>
+            <span>{{ $t('platform.cursor.quotaLabel') }}</span>
+          </div>
+          <div class="flex-1 text-[13px]">
+            <button
+              @click.stop="showUsageModal = true"
+              class="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-accent bg-accent/10 border border-accent/30 rounded hover:bg-accent/20 transition-colors cursor-pointer"
+            >
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 3h2v18H3V3zm16 8h2v10h-2V11zm-8 4h2v6h-2v-6zm4-8h2v14h-2V7zm-8 6h2v8H7v-8z"/>
+              </svg>
+              {{ $t('cursorUsage.viewUsage') }}
+            </button>
+          </div>
         </div>
       </template>
 
