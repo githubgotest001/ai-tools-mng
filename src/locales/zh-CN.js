@@ -1837,6 +1837,7 @@ export default {
       grokBotAvailableHint: 'Grok Bot 本周剩余额度，与 Auto / API 月度池分开计算',
       grokBotResets: '重置 {date}',
       billingCycleShort: '账期',
+      quotaLabel: '配额',
       searchPlaceholder: '搜索邮箱...',
       sortByQuota: '按配额排序',
       batchRefresh: '批量刷新',

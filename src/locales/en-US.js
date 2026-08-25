@@ -1844,6 +1844,7 @@ export default {
       grokBotAvailableHint: 'Remaining Grok Bot weekly allowance, separate from the monthly Auto / API pools.',
       grokBotResets: 'Resets {date}',
       billingCycleShort: 'Cycle',
+      quotaLabel: 'Quota',
       searchPlaceholder: 'Search email...',
       sortByQuota: 'Sort by Quota',
       batchRefresh: 'Batch refresh',
