@@ -119,7 +119,7 @@ fn normalize_session(value: &Value, current_session_id: Option<&str>) -> Option<
     let id = pick_str(map, &["id", "session_id", "sessionId"])?;
     let session_type = pick_str(map, &["type", "session_type", "sessionType"]);
 
-    // 服务端没给 isCurrent 时，退回用本地 session token 里的 sid 认领当前设备
+    // 服务端没给 isCurrent 时，退回用本地 session token 里的会话 id 认领当前设备
     let is_current = pick_bool(map, &["is_current", "isCurrent", "current"]).unwrap_or_else(|| {
         current_session_id.is_some_and(|current| current == id)
     });
@@ -147,7 +147,12 @@ fn normalize_session(value: &Value, current_session_id: Option<&str>) -> Option<
     })
 }
 
-/// 从 `WorkosCursorSessionToken` 的 JWT 里读会话 id（WorkOS 放在 `sid`）。
+/// 从 `WorkosCursorSessionToken` 的 JWT 里读会话 id。
+///
+/// Cursor 签的 token 把它放在 `workosSessionId`（实测 payload：`sub`、`time`、
+/// `randomness`、`exp`、`iss`、`scope`、`aud`、`type`、`workosSessionId`），
+/// 值形如 `session_01XXXX`，和 `/api/auth/sessions` 列表里的 id 同一套编号。
+/// `sid` 是 WorkOS 原生 token 的写法，留着兜底。
 /// 只用于标记「当前设备」，取不到就算了。
 fn session_id_from_token(session_token: &str) -> Option<String> {
     let jwt = if session_token.contains("%3A%3A") {
@@ -160,9 +165,9 @@ fn session_id_from_token(session_token: &str) -> Option<String> {
 
     let payload = URL_SAFE_NO_PAD.decode(jwt.split('.').nth(1)?).ok()?;
     let json: Value = serde_json::from_slice(&payload).ok()?;
-    json.get("sid")
-        .or_else(|| json.get("session_id"))
-        .and_then(Value::as_str)
+    ["workosSessionId", "workos_session_id", "sid", "session_id"]
+        .iter()
+        .find_map(|key| json.get(*key).and_then(Value::as_str))
         .map(str::to_string)
 }
 
@@ -343,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn falls_back_to_token_sid_for_current_device() {
+    fn falls_back_to_token_session_id_for_current_device() {
         let raw = serde_json::json!({ "id": "session_01ABC", "type": "SESSION_TYPE_WEB" });
 
         assert!(normalize_session(&raw, Some("session_01ABC")).unwrap().is_current);
@@ -364,15 +369,58 @@ mod tests {
         assert_eq!(session.raw["somethingNew"], "keep me");
     }
 
+    /// 拼一个 `user_xxx::<jwt>` 形态的 session token，payload 为给定 JSON
+    fn session_token_with_payload(payload: &str, separator: &str) -> String {
+        format!(
+            "user_01{}eyJhbGciOiJIUzI1NiJ9.{}.sig",
+            separator,
+            URL_SAFE_NO_PAD.encode(payload.as_bytes())
+        )
+    }
+
     #[test]
-    fn reads_session_id_from_token() {
-        // header.payload.signature，payload = {"sid":"session_01ABC","sub":"user_01"}
-        let payload = URL_SAFE_NO_PAD.encode(br#"{"sid":"session_01ABC","sub":"user_01"}"#);
-        let token = format!("user_01%3A%3AeyJhbGciOiJIUzI1NiJ9.{}.sig", payload);
+    fn reads_workos_session_id_from_token() {
+        // Cursor 实际签发的 payload 形态：会话 id 在 workosSessionId，没有 sid
+        let token = session_token_with_payload(
+            r#"{"sub":"grok|user_01","type":"web","workosSessionId":"session_01ABC"}"#,
+            "%3A%3A",
+        );
         assert_eq!(
             session_id_from_token(&token).as_deref(),
             Some("session_01ABC")
         );
+    }
+
+    #[test]
+    fn reads_session_id_from_legacy_keys() {
+        for key in ["workos_session_id", "sid", "session_id"] {
+            let token =
+                session_token_with_payload(&format!(r#"{{"{key}":"session_01ABC"}}"#), "::");
+            assert_eq!(
+                session_id_from_token(&token).as_deref(),
+                Some("session_01ABC"),
+                "failed for key {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn prefers_workos_session_id_over_sid() {
+        let token = session_token_with_payload(
+            r#"{"sid":"session_01LEGACY","workosSessionId":"session_01ABC"}"#,
+            "::",
+        );
+        assert_eq!(
+            session_id_from_token(&token).as_deref(),
+            Some("session_01ABC")
+        );
+    }
+
+    #[test]
+    fn returns_none_when_token_has_no_session_id() {
+        let token = session_token_with_payload(r#"{"sub":"grok|user_01"}"#, "::");
+        assert_eq!(session_id_from_token(&token), None);
+        assert_eq!(session_id_from_token("not-a-jwt"), None);
     }
 
     #[test]

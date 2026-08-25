@@ -837,12 +837,21 @@ const handleSwitch = async (accountId) => {
   const account = accounts.value.find(a => a.id === accountId)
   if (!account) return
 
-  // 如果账号有绑定的机器码，弹出选项对话框
+  // 如果账号有绑定的机器码，弹出选项对话框（该对话框本身就是一次确认，不再叠加 confirm）
   if (hasMachineInfo(account)) {
     pendingSwitchAccount.value = account
     showMachineIdOptionDialog.value = true
     return
   }
+
+  const confirmed = await window.$confirm?.({
+    title: $t('platform.cursor.switchConfirm.title'),
+    message: $t('platform.cursor.switchConfirm.message', { email: account.email }),
+    confirmText: $t('platform.cursor.switch'),
+    cancelText: $t('common.cancel'),
+    variant: 'primary'
+  })
+  if (!confirmed) return
 
   // 没有机器码，直接使用随机生成
   await performSwitch(accountId, false)
@@ -943,12 +952,21 @@ const handleAccountsImported = async (result) => {
 }
 
 const handleDelete = async (accountId) => {
+  const account = accounts.value.find(a => a.id === accountId)
+  if (!account) return
+
+  const confirmed = await window.$confirm?.({
+    title: $t('platform.cursor.deleteConfirm.title'),
+    message: $t('platform.cursor.deleteConfirm.message', { email: account.email }),
+    confirmText: $t('common.delete'),
+    cancelText: $t('common.cancel'),
+    variant: 'danger'
+  })
+  if (!confirmed) return
+
   try {
-    const account = accounts.value.find(a => a.id === accountId)
     await invoke('cursor_delete_account', { accountId })
-    if (account) {
-      markItemDeletion(account)
-    }
+    markItemDeletion(account)
     await loadAccounts()
     window.$notify?.success($t('platform.cursor.messages.deleteSuccess'))
   } catch (error) {
