@@ -1977,6 +1977,14 @@ export default {
         useRandomDesc: 'Randomly generate new machine ID (recommended for first use)',
         confirm: 'Confirm Switch'
       },
+      switchConfirm: {
+        title: 'Confirm Account Switch',
+        message: 'Switch to account "{email}"? This will overwrite the account Cursor is currently signed in with.'
+      },
+      deleteConfirm: {
+        title: 'Confirm Delete',
+        message: 'Delete Cursor account "{email}"? This action cannot be undone.'
+      },
       importAccounts: 'Import Accounts',
       permission: {
         title: 'App Management Permission Required',

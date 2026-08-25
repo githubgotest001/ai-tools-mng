@@ -1970,6 +1970,14 @@ export default {
         useRandomDesc: '随机生成新的机器码（推荐首次使用）',
         confirm: '确认切换'
       },
+      switchConfirm: {
+        title: '确认切换账号',
+        message: '确定要切换到账号 "{email}" 吗？这将覆盖 Cursor 当前的登录状态。'
+      },
+      deleteConfirm: {
+        title: '确认删除',
+        message: '确定要删除 Cursor 账号 "{email}" 吗？此操作无法撤销。'
+      },
       importAccounts: '导入账号',
       permission: {
         title: '需要授予应用管理权限',
