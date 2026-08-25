@@ -4,6 +4,7 @@ pub mod grok_bot;
 pub mod machine;
 pub mod mapper;
 pub mod process;
+pub mod sessions;
 pub mod storage;
 
 pub use mapper::*;

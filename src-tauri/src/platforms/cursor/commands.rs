@@ -1,7 +1,7 @@
 //! Cursor Tauri Commands
 
 use crate::cursor::models::{Account, MachineInfo, TokenData};
-use crate::cursor::modules::{auth, db, machine, process, storage};
+use crate::cursor::modules::{auth, db, machine, process, sessions, storage};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -305,6 +305,24 @@ pub async fn cursor_get_filtered_usage_events(
         page_size,
     )
     .await
+}
+
+/// 列出账号的登录设备 / 活跃会话
+#[tauri::command]
+pub async fn cursor_list_sessions(
+    session_token: String,
+) -> Result<sessions::CursorSessionList, String> {
+    sessions::list_sessions(&session_token).await
+}
+
+/// 踢出指定登录设备。`session_type` 传列表里返回的字符串枚举
+#[tauri::command]
+pub async fn cursor_revoke_session(
+    session_token: String,
+    session_id: String,
+    session_type: Option<String>,
+) -> Result<(), String> {
+    sessions::revoke_session(&session_token, &session_id, session_type.as_deref()).await
 }
 
 /// 从 session token 获取用户信息
