@@ -9,6 +9,7 @@ import {
   billingCycleRange,
   getQuotaTextClass,
   grokBotRemainingPercent,
+  isCursorSessionExpiredError,
   planRemainingPercentFromCents,
   planSpendLabel,
   remainingPercentFromUsed
@@ -164,4 +165,25 @@ test('写回用量摘要时保留上一次的 Grok Bot 周额度', () => {
   assert.deepEqual(account.individual_usage.plan, officialPlan)
   assert.deepEqual(account.individual_usage.grokBot, { percentUsed: 20 })
   assert.equal(account.individual_usage.billingCycleStart, '2026-08-02T14:11:55.000Z')
+})
+
+test('摘要缺少 membershipType 时保留账号原有套餐', () => {
+  const account = { membership_type: 'ultra', individual_usage: {} }
+
+  applyCursorUsageSummary(account, { individualUsage: { plan: officialPlan } })
+  assert.equal(account.membership_type, 'ultra')
+
+  applyCursorUsageSummary(account, { membershipType: '  ' })
+  assert.equal(account.membership_type, 'ultra')
+
+  applyCursorUsageSummary(account, null)
+  assert.equal(account.membership_type, 'ultra')
+})
+
+test('识别 session 失效报错，避免当成普通刷新失败', () => {
+  assert.equal(isCursorSessionExpiredError('Session expired (HTTP 401)'), true)
+  assert.equal(isCursorSessionExpiredError(new Error('Session expired (HTTP 403)')), true)
+  assert.equal(isCursorSessionExpiredError('Cursor server error (HTTP 500)'), false)
+  assert.equal(isCursorSessionExpiredError('Usage summary request failed: timeout'), false)
+  assert.equal(isCursorSessionExpiredError(null), false)
 })

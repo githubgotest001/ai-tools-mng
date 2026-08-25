@@ -541,7 +541,7 @@ import SyncQueueModal from '../common/SyncQueueModal.vue'
 import CustomPathDialog from '../common/CustomPathDialog.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
 import { useStorageSync } from '@/composables/useStorageSync'
-import { applyCursorUsageSummary } from '@/utils/cursorUsage'
+import { applyCursorUsageSummary, isCursorSessionExpiredError } from '@/utils/cursorUsage'
 import {
   compareByBillingCycleEnd,
   compareByMembership,
@@ -901,6 +901,7 @@ const handleBatchRefreshQuota = async () => {
   isRefreshing.value = true
   let success = 0
   let fail = 0
+  let expired = 0
   for (const account of pageAccounts) {
     try {
       const summary = await invoke('cursor_get_usage_summary', {
@@ -912,15 +913,18 @@ const handleBatchRefreshQuota = async () => {
       markItemUpsertById(account.id)
       success++
     } catch (e) {
+      // 失败的账号整个跳过，保留它原有的套餐与用量
       console.error(`Failed to refresh quota for ${account.email}:`, e)
       fail++
+      if (isCursorSessionExpiredError(e)) expired++
     }
   }
   isRefreshing.value = false
   if (fail === 0) {
     window.$notify?.success($t('platform.cursor.batchRefreshQuota') + ` (${success}/${pageAccounts.length})`)
   } else {
-    window.$notify?.warning(`${success} ${$t('common.success')}, ${fail} ${$t('common.failed')}`)
+    const expiredHint = expired > 0 ? `, ${expired} ${$t('platform.cursor.messages.sessionExpired')}` : ''
+    window.$notify?.warning(`${success} ${$t('common.success')}, ${fail} ${$t('common.failed')}${expiredHint}`)
   }
 }
 
@@ -1068,8 +1072,13 @@ const handleRefreshQuota = async (accountId) => {
     await invoke('cursor_update_account', { account })
     markItemUpsertById(accountId)
   } catch (e) {
+    // 失败时不写回任何摘要，账号原有 membership_type 保持不变
     console.error('Failed to refresh quota:', e)
-    window.$notify?.error(e?.message || e)
+    window.$notify?.error(
+      isCursorSessionExpiredError(e)
+        ? $t('platform.cursor.messages.sessionExpired')
+        : $t('platform.cursor.messages.refreshFailed', { error: e?.message || e })
+    )
   } finally {
     refreshingAccountId.value = null
   }

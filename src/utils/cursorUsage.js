@@ -1,8 +1,20 @@
+/**
+ * 判断刷新配额的报错是不是 session 失效（后端 `Session expired (HTTP 401)`）。
+ *
+ * 这类失败必须提示重新登录，而不是把账号套餐当成 free 写回去。
+ */
+export function isCursorSessionExpiredError(error) {
+  const text = typeof error === 'string' ? error : (error?.message ?? String(error ?? ''))
+  return /session expired|http 401|http 403/i.test(text)
+}
+
 /** 将 usage-summary 写回账号，并保留上次已拉到的 Grok Bot 周额度 */
 export function applyCursorUsageSummary(account, summary) {
   if (!account || !summary) return account
 
-  if (summary.membershipType) {
+  // 只认非空字符串：摘要缺 membershipType 时保留账号原有套餐，
+  // 免得一次异常响应把 Ultra/Pro 抹成别的值
+  if (typeof summary.membershipType === 'string' && summary.membershipType.trim()) {
     account.membership_type = summary.membershipType
   }
 

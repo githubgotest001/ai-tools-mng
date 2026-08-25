@@ -161,7 +161,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
 import BaseModal from '../common/BaseModal.vue'
 import CursorUsageCharts from './CursorUsageCharts.vue'
-import { applyCursorUsageSummary } from '../../utils/cursorUsage'
+import { applyCursorUsageSummary, isCursorSessionExpiredError } from '../../utils/cursorUsage'
 import { useCursorQuota } from '../../composables/useCursorQuota'
 
 const { t: $t } = useI18n()
@@ -455,7 +455,13 @@ const fetchUsageSummary = async () => {
     await invoke('cursor_update_account', { account: props.account })
     emit('account-synced', props.account.id)
   } catch (e) {
+    // 失败时不写回摘要，账号原有 membership_type 保持不变
     console.error('Failed to fetch usage summary:', e)
+    window.$notify?.error(
+      isCursorSessionExpiredError(e)
+        ? $t('platform.cursor.messages.sessionExpired')
+        : $t('platform.cursor.messages.refreshFailed', { error: e?.message || e })
+    )
   }
 }
 
