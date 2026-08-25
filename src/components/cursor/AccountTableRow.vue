@@ -63,10 +63,10 @@
     </td>
 
     <!-- 可用额度：Auto / API / Bot 分池剩余进度条 -->
-    <td class="w-[170px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[12px] text-text-muted">
+    <td class="w-[200px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[12px] text-text-muted">
       <div v-if="hasSessionToken && quotaBars.length" class="flex flex-col gap-1">
         <div v-for="item in quotaBars" :key="item.key" class="flex items-center gap-1">
-          <span class="w-8 shrink-0 text-text-muted/60" v-tooltip="quotaBarHint(item)">{{ $t(`platform.cursor.${item.key}Short`) }}</span>
+          <span class="w-[4.5rem] shrink-0 text-text-muted/60 truncate" v-tooltip="quotaBarHint(item)">{{ $t(`platform.cursor.${item.key}Available`) }}</span>
           <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
             <div class="h-full rounded transition-all"
                  :class="getQuotaBarClass(item.percent)"
