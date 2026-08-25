@@ -249,13 +249,14 @@
             </button>
           </div>
         </div>
-        <!-- 会员类型筛选 -->
+        <!-- 会员类型筛选（多选） -->
         <div v-if="Object.keys(membershipStatistics).length > 2" class="flex flex-col gap-2">
-          <span class="label">会员类型</span>
+          <span class="label" v-tooltip="$t('platform.cursor.filter.membershipMultiSelectHint')">{{ $t('platform.cursor.filter.membershipType') }}</span>
           <div class="flex flex-wrap gap-2">
             <button
-              :class="['btn btn--sm', selectedMembershipFilter === null ? 'btn--primary' : 'btn--secondary']"
-              @click="selectedMembershipFilter = null"
+              :class="['btn btn--sm', selectedMembershipTypes.size === 0 ? 'btn--primary' : 'btn--secondary']"
+              @click="clearMembershipFilter"
+              data-toolbar-keep-open
             >
               <span>{{ $t('platform.cursor.filter.all') }}</span>
               <span class="ml-1 opacity-70">({{ membershipStatistics.total }})</span>
@@ -264,8 +265,9 @@
               v-for="(count, type) in membershipStatistics"
               :key="type"
               v-show="type !== 'total'"
-              :class="['btn btn--sm', selectedMembershipFilter === type ? 'btn--primary' : 'btn--secondary']"
-              @click="selectedMembershipFilter = type"
+              :class="['btn btn--sm', selectedMembershipTypes.has(type) ? 'btn--primary' : 'btn--secondary']"
+              @click="toggleMembershipType(type)"
+              data-toolbar-keep-open
             >
               <span>{{ type }}</span>
               <span class="ml-1 opacity-70">({{ count }})</span>
@@ -341,6 +343,20 @@
             </button>
             <button :class="['btn btn--sm', sortType === 'apiUsage' ? 'btn--primary' : 'btn--secondary']" @click="sortType = 'apiUsage'">
               按额度
+            </button>
+            <button
+              :class="['btn btn--sm', sortType === 'membership' ? 'btn--primary' : 'btn--secondary']"
+              @click="sortType = 'membership'"
+              v-tooltip="$t('platform.cursor.sortByMembershipHint')"
+            >
+              {{ $t('platform.cursor.sortByMembership') }}
+            </button>
+            <button
+              :class="['btn btn--sm', sortType === 'billingCycleEnd' ? 'btn--primary' : 'btn--secondary']"
+              @click="sortType = 'billingCycleEnd'"
+              v-tooltip="$t('platform.cursor.sortByBillingCycleEndHint')"
+            >
+              {{ $t('platform.cursor.sortByBillingCycleEnd') }}
             </button>
           </div>
         </div>
@@ -526,6 +542,12 @@ import CustomPathDialog from '../common/CustomPathDialog.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
 import { useStorageSync } from '@/composables/useStorageSync'
 import { applyCursorUsageSummary } from '@/utils/cursorUsage'
+import {
+  compareByBillingCycleEnd,
+  compareByMembership,
+  matchesMembershipTypes,
+  membershipTypeKey
+} from '@/utils/cursorSort'
 
 const { t: $t } = useI18n()
 
@@ -597,8 +619,8 @@ const tagFilterMode = ref('include')
 const toolbarMode = ref('hidden')
 const toolbarSearchInputRef = ref(null)
 
-// 会员类型筛选
-const selectedMembershipFilter = ref(null)
+// 会员类型筛选（多选，空集合等价于「全部」）
+const selectedMembershipTypes = ref(new Set())
 
 // 排序
 const sortType = ref('time')
@@ -669,7 +691,7 @@ const membershipStatistics = computed(() => {
   const stats = { total: accounts.value.length }
   const counts = {}
   accounts.value.forEach(a => {
-    const type = (a.membership_type || 'free').toLowerCase()
+    const type = membershipTypeKey(a)
     counts[type] = (counts[type] || 0) + 1
   })
   return { ...stats, ...counts }
@@ -695,12 +717,9 @@ const filteredAccounts = computed(() => {
     })
   }
 
-  // 会员类型筛选
-  if (selectedMembershipFilter.value) {
-    result = result.filter(account => {
-      const type = (account.membership_type || 'free').toLowerCase()
-      return type === selectedMembershipFilter.value
-    })
+  // 会员类型筛选（多选）
+  if (selectedMembershipTypes.value.size > 0) {
+    result = result.filter(account => matchesMembershipTypes(account, selectedMembershipTypes.value))
   }
 
   // 标签筛选
@@ -741,6 +760,10 @@ const filteredAccounts = computed(() => {
       const valA = usageA != null ? usageA : (sortOrder.value === 'desc' ? -1 : Infinity)
       const valB = usageB != null ? usageB : (sortOrder.value === 'desc' ? -1 : Infinity)
       return sortOrder.value === 'desc' ? valB - valA : valA - valB
+    } else if (sortType.value === 'membership') {
+      return compareByMembership(a, b, sortOrder.value)
+    } else if (sortType.value === 'billingCycleEnd') {
+      return compareByBillingCycleEnd(a, b, sortOrder.value)
     }
     return 0
   })
@@ -768,13 +791,13 @@ const shouldShowPagination = computed(() => !isLoading.value && accounts.value.l
 
 // 搜索/筛选/排序活跃状态
 const isSearchActive = computed(() => searchQuery.value.trim() !== '')
-const isFilterActive = computed(() => selectedStatusFilter.value !== null || selectedMembershipFilter.value !== null || selectedTags.value.size > 0)
+const isFilterActive = computed(() => selectedStatusFilter.value !== null || selectedMembershipTypes.value.size > 0 || selectedTags.value.size > 0)
 const isSortNonDefault = computed(() => sortType.value !== 'time' || sortOrder.value !== 'desc')
 
 const clearAllFilters = () => {
   searchQuery.value = ''
   selectedStatusFilter.value = null
-  selectedMembershipFilter.value = null
+  selectedMembershipTypes.value = new Set()
   selectedTags.value = new Set()
   tagFilterMode.value = 'include'
   sortType.value = 'time'
@@ -959,6 +982,21 @@ const toggleTag = (tagName) => {
 
 const clearTagFilter = () => {
   selectedTags.value = new Set()
+}
+
+// 会员类型筛选：与标签筛选一致的多选交互，「全部」即清空选择
+const toggleMembershipType = (type) => {
+  const newSet = new Set(selectedMembershipTypes.value)
+  if (newSet.has(type)) {
+    newSet.delete(type)
+  } else {
+    newSet.add(type)
+  }
+  selectedMembershipTypes.value = newSet
+}
+
+const clearMembershipFilter = () => {
+  selectedMembershipTypes.value = new Set()
 }
 
 // 处理账号更新（标签等）
@@ -1169,7 +1207,7 @@ const handleBatchExport = async () => {
   }
 }
 
-watch([searchQuery, selectedStatusFilter, selectedMembershipFilter, selectedTags, tagFilterMode], () => {
+watch([searchQuery, selectedStatusFilter, selectedMembershipTypes, selectedTags, tagFilterMode], () => {
   currentPage.value = 1
 })
 
