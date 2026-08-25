@@ -190,7 +190,7 @@
             <svg class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 12h2v5H7zm4-3h2v8h-2zm4-3h2v11h-2z"/>
             </svg>
-            <span v-tooltip="quotaBarHint(item)">{{ $t(`platform.cursor.${item.key}Short`) }}</span>
+            <span v-tooltip="quotaBarHint(item)">{{ $t(`platform.cursor.${item.key}Available`) }}</span>
           </div>
           <div class="flex-1 flex items-center gap-1">
             <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">

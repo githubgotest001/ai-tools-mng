@@ -154,7 +154,7 @@
                 </th>
                 <th class="th w-[140px]">{{ $t('platform.cursor.table.tag') }}</th>
                 <th class="th">{{ $t('platform.cursor.table.email') }}</th>
-                <th class="th w-[170px]">{{ $t('platform.cursor.table.usage') }}</th>
+                <th class="th w-[200px]">{{ $t('platform.cursor.table.usage') }}</th>
                 <th class="th w-[105px]">{{ $t('platform.cursor.table.expiry') }}</th>
                 <th class="th w-[120px]">{{ $t('platform.cursor.table.quota') }}</th>
                 <th class="th w-[80px] text-center">{{ $t('platform.cursor.table.actions') }}</th>
