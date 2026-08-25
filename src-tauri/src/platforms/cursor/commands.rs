@@ -360,6 +360,8 @@ pub async fn cursor_refresh_account_tokens(
     account.token.expiry_timestamp = expiry_timestamp;
     account.token.workos_cursor_session_token = Some(session_token);
     account.token.session_expiry_timestamp = session_expiry_timestamp;
+    // 换了新 session，之前的失效标记不再成立
+    account.session_invalid_at = None;
     account.updated_at = chrono::Utc::now().timestamp();
 
     // 5. 保存更新后的账号

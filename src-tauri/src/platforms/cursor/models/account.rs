@@ -82,6 +82,11 @@ pub struct Account {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub individual_usage: Option<IndividualUsage>,
 
+    /// 最近一次确认 session 失效的时间戳（刷新配额收到 401/403）。
+    /// 有值即在列表里显示「Session 失效」，刷新成功或换新 token 后清空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_invalid_at: Option<i64>,
+
     #[serde(default)]
     pub disabled: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -144,6 +149,7 @@ impl Account {
             machine_info: None,
             membership_type: None,
             individual_usage: None,
+            session_invalid_at: None,
             disabled: false,
             disabled_reason: None,
             disabled_at: None,
@@ -173,6 +179,7 @@ impl Account {
             machine_info,
             membership_type: None,
             individual_usage: None,
+            session_invalid_at: None,
             disabled: false,
             disabled_reason: None,
             disabled_at: None,

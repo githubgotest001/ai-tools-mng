@@ -116,6 +116,14 @@ pub async fn add_new_fields_if_not_exist(
         )
         .await?;
 
+    // 添加 session_invalid_at 字段（如果不存在）- 记录最近一次确认 session 失效的时间
+    client
+        .execute(
+            "ALTER TABLE cursor_accounts ADD COLUMN IF NOT EXISTS session_invalid_at BIGINT",
+            &[],
+        )
+        .await?;
+
     Ok(())
 }
 
