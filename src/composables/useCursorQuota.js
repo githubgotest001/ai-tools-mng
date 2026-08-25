@@ -2,18 +2,32 @@ import { computed } from 'vue'
 import {
   getQuotaBarClass,
   grokBotRemainingPercent,
+  planRemainingPercentFromCents,
+  planSpendLabel,
   remainingPercentFromUsed
 } from '../utils/cursorUsage'
 
 export function useCursorQuota(getAccount) {
   const account = computed(() => getAccount())
 
+  const plan = computed(() => account.value?.individual_usage?.plan || null)
+
+  const planRemainingPercent = computed(() => planRemainingPercentFromCents(plan.value))
+
+  const planSpend = computed(() => planSpendLabel(plan.value))
+
+  const showPlanQuota = computed(() => planRemainingPercent.value !== null)
+
+  const totalRemainingPercent = computed(() =>
+    remainingPercentFromUsed(plan.value?.totalPercentUsed)
+  )
+
   const autoRemainingPercent = computed(() =>
-    remainingPercentFromUsed(account.value?.individual_usage?.plan?.autoPercentUsed)
+    remainingPercentFromUsed(plan.value?.autoPercentUsed)
   )
 
   const apiRemainingPercent = computed(() =>
-    remainingPercentFromUsed(account.value?.individual_usage?.plan?.apiPercentUsed)
+    remainingPercentFromUsed(plan.value?.apiPercentUsed)
   )
 
   const grokBot = computed(() => {
@@ -34,6 +48,10 @@ export function useCursorQuota(getAccount) {
   })
 
   return {
+    planRemainingPercent,
+    planSpend,
+    showPlanQuota,
+    totalRemainingPercent,
     autoRemainingPercent,
     apiRemainingPercent,
     grokBotRemaining,

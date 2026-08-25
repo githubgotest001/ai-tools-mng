@@ -80,52 +80,72 @@ impl GrokBotUsage {
 }
 
 /// Plan 用量
+///
+/// 这里有两套互不相通的口径，不能互相换算：
+/// - 美分字段（used / limit / remaining / breakdown）：limit 是套餐月费美分
+///   （Pro = 2000），breakdown.included / limit 就是仪表盘横幅
+///   “You've used X% of your included usage”。
+/// - percent 字段：Spending 页三条进度条。autoPercentUsed 是 Cursor Models 池、
+///   apiPercentUsed 是 Other Models 池、totalPercentUsed 是两池花费除以两池
+///   合计预算。官方确认它们「不是简单的 totalSpend / limit，用的是另一套内部
+///   指标」，分母是各池真实预算，远大于 limit，所以数值天然对不上。
+///
+/// 两类字段都可能缺失（团队/企业账号），缺失必须保持 None，
+/// 否则会被当成 0 而在界面上显示成“额度全满”。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanUsage {
     #[serde(default)]
     pub enabled: bool,
-    #[serde(default, deserialize_with = "null_as_zero")]
-    pub used: f64,
-    #[serde(default, deserialize_with = "null_as_zero")]
-    pub limit: f64,
-    #[serde(default, deserialize_with = "null_as_zero")]
-    pub remaining: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub used: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remaining: Option<f64>,
     #[serde(default)]
     pub breakdown: Option<PlanBreakdown>,
-    #[serde(rename = "autoPercentUsed", default, deserialize_with = "null_as_zero")]
-    pub auto_percent_used: f64,
-    #[serde(rename = "apiPercentUsed", default, deserialize_with = "null_as_zero")]
-    pub api_percent_used: f64,
+    #[serde(
+        rename = "autoPercentUsed",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub auto_percent_used: Option<f64>,
+    #[serde(
+        rename = "apiPercentUsed",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub api_percent_used: Option<f64>,
     #[serde(
         rename = "totalPercentUsed",
         default,
-        deserialize_with = "null_as_zero"
+        skip_serializing_if = "Option::is_none"
     )]
-    pub total_percent_used: f64,
+    pub total_percent_used: Option<f64>,
 }
 
-/// Plan 用量明细
+/// Plan 用量明细（included 是横幅百分比的分子，缺失同样不能当 0）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanBreakdown {
-    #[serde(default, deserialize_with = "null_as_zero")]
-    pub included: f64,
-    #[serde(default, deserialize_with = "null_as_zero")]
-    pub bonus: f64,
-    #[serde(default, deserialize_with = "null_as_zero")]
-    pub total: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub included: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bonus: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total: Option<f64>,
 }
 
-/// On-Demand 用量
+/// On-Demand 用量（limit / remaining 为 null 表示未设上限）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OnDemandUsage {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default, deserialize_with = "null_as_zero")]
     pub used: f64,
-    #[serde(default, deserialize_with = "null_as_zero")]
-    pub limit: f64,
-    #[serde(default, deserialize_with = "null_as_zero")]
-    pub remaining: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remaining: Option<f64>,
 }
 
 /// 聚合用量数据
@@ -666,4 +686,108 @@ pub async fn get_access_token_from_session(
     }
 
     Err("Timeout: Failed to get access token after 20 seconds".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_plan_cents_and_percent_fields() {
+        let raw = serde_json::json!({
+            "membershipType": "pro",
+            "billingCycleStart": "2026-08-02T14:11:55.000Z",
+            "billingCycleEnd": "2026-09-02T14:11:55.000Z",
+            "individualUsage": {
+                "plan": {
+                    "enabled": true,
+                    "used": 1288,
+                    "limit": 2000,
+                    "remaining": 712,
+                    "breakdown": { "included": 1288, "bonus": 0, "total": 1288 },
+                    "autoPercentUsed": 3.8966666666666665,
+                    "apiPercentUsed": 2.6444444444444444,
+                    "totalPercentUsed": 3.733333333333334
+                },
+                "onDemand": { "enabled": true, "used": 2309, "limit": null, "remaining": null }
+            }
+        });
+
+        let summary: UsageSummary = serde_json::from_value(raw).unwrap();
+        let usage = summary.individual_usage.unwrap();
+        let plan = usage.plan.unwrap();
+
+        assert_eq!(plan.used, Some(1288.0));
+        assert_eq!(plan.limit, Some(2000.0));
+        assert_eq!(plan.remaining, Some(712.0));
+        assert_eq!(plan.breakdown.as_ref().unwrap().included, Some(1288.0));
+        assert_eq!(plan.breakdown.as_ref().unwrap().bonus, Some(0.0));
+        assert!((plan.auto_percent_used.unwrap() - 3.8966666666666665).abs() < 1e-9);
+        assert!((plan.total_percent_used.unwrap() - 3.733333333333334).abs() < 1e-9);
+
+        // On-Demand 无上限时保持 None，不能退化成 $0 上限
+        let on_demand = usage.on_demand.unwrap();
+        assert_eq!(on_demand.used, 2309.0);
+        assert_eq!(on_demand.limit, None);
+    }
+
+    #[test]
+    fn missing_percent_fields_stay_none() {
+        let raw = serde_json::json!({
+            "membershipType": "enterprise",
+            "individualUsage": {
+                "plan": { "enabled": true, "used": 1500, "limit": 2000, "remaining": 500 }
+            }
+        });
+
+        let summary: UsageSummary = serde_json::from_value(raw).unwrap();
+        let plan = summary
+            .individual_usage
+            .and_then(|u| u.plan)
+            .expect("plan present");
+
+        assert_eq!(plan.auto_percent_used, None);
+        assert_eq!(plan.api_percent_used, None);
+        assert_eq!(plan.total_percent_used, None);
+    }
+
+    #[test]
+    fn absent_percent_fields_are_not_serialized_as_zero() {
+        let raw = serde_json::json!({
+            "individualUsage": { "plan": { "enabled": true, "used": null, "limit": null } }
+        });
+
+        let summary: UsageSummary = serde_json::from_value(raw).unwrap();
+        let json = serde_json::to_value(&summary).unwrap();
+        let plan = &json["individualUsage"]["plan"];
+
+        assert!(plan.get("autoPercentUsed").is_none());
+        assert!(plan.get("used").is_none());
+        assert!(plan.get("limit").is_none());
+    }
+
+    #[test]
+    fn null_breakdown_entries_stay_none() {
+        let raw = serde_json::json!({
+            "individualUsage": {
+                "plan": {
+                    "enabled": true,
+                    "limit": 2000,
+                    "breakdown": { "included": null, "bonus": 0 }
+                }
+            }
+        });
+
+        let summary: UsageSummary = serde_json::from_value(raw).unwrap();
+        let breakdown = summary
+            .individual_usage
+            .and_then(|u| u.plan)
+            .and_then(|p| p.breakdown)
+            .expect("breakdown present");
+
+        // included 缺失时若退化成 0，界面会把套餐算成一分没用
+        assert_eq!(breakdown.included, None);
+        assert_eq!(breakdown.bonus, Some(0.0));
+        assert_eq!(breakdown.total, None);
+    }
 }
