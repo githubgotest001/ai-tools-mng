@@ -152,11 +152,11 @@
                     </div>
                   </div>
                 </th>
-                <th class="th w-[60px]">{{ $t('platform.cursor.table.tag') }}</th>
+                <th class="th w-[140px]">{{ $t('platform.cursor.table.tag') }}</th>
                 <th class="th">{{ $t('platform.cursor.table.email') }}</th>
-                <th class="th w-[150px]">{{ $t('platform.cursor.table.usage') }}</th>
+                <th class="th w-[170px]">{{ $t('platform.cursor.table.usage') }}</th>
                 <th class="th w-[105px]">{{ $t('platform.cursor.table.expiry') }}</th>
-                <th class="th w-[100px]">{{ $t('platform.cursor.table.quota') }}</th>
+                <th class="th w-[120px]">{{ $t('platform.cursor.table.quota') }}</th>
                 <th class="th w-[80px] text-center">{{ $t('platform.cursor.table.actions') }}</th>
               </tr>
             </thead>

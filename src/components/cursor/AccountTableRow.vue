@@ -19,7 +19,7 @@
     </td>
 
     <!-- 标签 -->
-    <td class="w-[60px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[13px] text-text">
+    <td class="w-[140px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[13px] text-text">
       <span
         v-if="!hasTag"
         class="btn btn--icon-sm btn--dashed"
@@ -32,7 +32,7 @@
       </span>
       <span
         v-else
-        class="badge editable badge--sm max-w-[50px]"
+        class="badge editable badge--sm max-w-[120px] truncate"
         :style="tagBadgeStyle"
         v-tooltip="$t('tokenList.clickToEditTag')"
         @click.stop="openTagEditor"
@@ -44,10 +44,10 @@
     <!-- 邮箱 -->
     <td class="px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[13px] text-text">
       <div class="flex items-center gap-1.5">
-        <div class="text-copyable" @click.stop="copyEmail" v-tooltip="account.email">
+        <div class="text-copyable min-w-0" @click.stop="copyEmail" v-tooltip="account.email">
           <span class="text-copyable__content">{{ showRealEmail ? account.email : maskedEmail }}</span>
         </div>
-        <span v-if="account.membership_type" :class="getMembershipBadgeClass(account.membership_type)">
+        <span v-if="account.membership_type" class="shrink-0" :class="getMembershipBadgeClass(account.membership_type)">
           <svg v-if="account.membership_type?.toLowerCase() === 'ultra'" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 3H5L2 9l10 12L22 9l-3-6zM9.62 8l1.5-3h1.76l1.5 3H9.62zM11 10v6.68L5.44 10H11zm2 0h5.56L13 16.68V10zm6.26-2h-2.65l-1.5-3h2.65l1.5 3zM6.24 5h2.65l-1.5 3H4.74l1.5-3z"/>
           </svg>
@@ -63,7 +63,7 @@
     </td>
 
     <!-- 可用额度：Auto / API / Bot 分池剩余进度条 -->
-    <td class="w-[150px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[12px] text-text-muted">
+    <td class="w-[170px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[12px] text-text-muted">
       <div v-if="hasSessionToken && quotaBars.length" class="flex flex-col gap-1">
         <div v-for="item in quotaBars" :key="item.key" class="flex items-center gap-1">
           <span class="w-8 shrink-0 text-text-muted/60" v-tooltip="quotaBarHint(item)">{{ $t(`platform.cursor.${item.key}Short`) }}</span>
@@ -94,16 +94,17 @@
     </td>
 
     <!-- 配额 -->
-    <td class="w-[100px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[13px] text-text">
+    <td class="w-[120px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[13px] text-text">
       <button
         v-if="hasSessionToken"
         @click.stop="showUsageModal = true"
         class="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-accent bg-accent/10 border border-accent/30 rounded hover:bg-accent/20 transition-colors cursor-pointer"
+        v-tooltip="$t('cursorUsage.viewUsage')"
       >
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
           <path d="M3 3h2v18H3V3zm16 8h2v10h-2V11zm-8 4h2v6h-2v-6zm4-8h2v14h-2V7zm-8 6h2v8H7v-8z"/>
         </svg>
-        {{ $t('cursorUsage.viewUsage') }}
+        {{ $t('cursorUsage.viewUsageShort') }}
       </button>
       <span v-else class="text-text-muted/50">-</span>
     </td>
