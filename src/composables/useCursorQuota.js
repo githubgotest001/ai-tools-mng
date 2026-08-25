@@ -49,24 +49,10 @@ export function useCursorQuota(getAccount) {
     return date.toLocaleDateString()
   })
 
-  // 卡片/表格只展示一条主进度条：优先套餐口径（对应仪表盘横幅），
-  // 团队/企业账号没有套餐美分字段时退回 Total 池口径。
-  const primaryQuota = computed(() => {
-    if (planRemainingPercent.value !== null) {
-      return { key: 'plan', percent: planRemainingPercent.value }
-    }
-    if (totalRemainingPercent.value !== null) {
-      return { key: 'total', percent: totalRemainingPercent.value }
-    }
-    return null
-  })
-
-  // 其余口径压成一行文字摘要；主条已占用的口径不再重复出现
-  const secondaryQuotas = computed(() => {
+  // 卡片/表格只展示 Auto / API / Bot 三条分池进度条（口径为剩余可用），
+  // 套餐与 Total 口径留给用量详情弹窗；没有数据的池不渲染。
+  const quotaBars = computed(() => {
     const items = []
-    if (primaryQuota.value?.key !== 'total' && totalRemainingPercent.value !== null) {
-      items.push({ key: 'total', percent: totalRemainingPercent.value })
-    }
     if (autoRemainingPercent.value !== null) {
       items.push({ key: 'auto', percent: autoRemainingPercent.value })
     }
@@ -93,8 +79,7 @@ export function useCursorQuota(getAccount) {
     grokBotRemaining,
     showGrokBot,
     grokBotResetLabel,
-    primaryQuota,
-    secondaryQuotas,
+    quotaBars,
     billingCycle,
     getQuotaBarClass,
     getQuotaTextClass

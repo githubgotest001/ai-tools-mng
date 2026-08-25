@@ -62,29 +62,18 @@
       </div>
     </td>
 
-    <!-- 可用额度：一条主进度条 + 一行摘要 -->
+    <!-- 可用额度：Auto / API / Bot 分池剩余进度条 -->
     <td class="w-[150px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[12px] text-text-muted">
-      <div v-if="hasSessionToken && primaryQuota" class="flex flex-col gap-1">
-        <div class="flex items-center gap-1">
-          <span class="w-7 shrink-0 text-text-muted/60" v-tooltip="primaryQuotaHint">{{ $t(`platform.cursor.${primaryQuota.key}Short`) }}</span>
+      <div v-if="hasSessionToken && quotaBars.length" class="flex flex-col gap-1">
+        <div v-for="item in quotaBars" :key="item.key" class="flex items-center gap-1">
+          <span class="w-8 shrink-0 text-text-muted/60" v-tooltip="quotaBarHint(item)">{{ $t(`platform.cursor.${item.key}Short`) }}</span>
           <div class="flex-1 h-1.5 bg-muted rounded overflow-hidden">
             <div class="h-full rounded transition-all"
-                 :class="getQuotaBarClass(primaryQuota.percent)"
-                 :style="{ width: primaryQuota.percent + '%' }">
+                 :class="getQuotaBarClass(item.percent)"
+                 :style="{ width: item.percent + '%' }">
             </div>
           </div>
-          <span class="text-[11px] font-medium tabular-nums w-7 text-right">{{ primaryQuota.percent }}%</span>
-        </div>
-        <div v-if="secondaryQuotas.length" class="flex flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] tabular-nums whitespace-normal">
-          <span
-            v-for="item in secondaryQuotas"
-            :key="item.key"
-            class="whitespace-nowrap"
-            v-tooltip="secondaryQuotaHint(item)"
-          >
-            {{ $t(`platform.cursor.${item.key}Short`) }}
-            <span class="font-medium" :class="getQuotaTextClass(item.percent)">{{ item.percent }}%</span>
-          </span>
+          <span class="text-[11px] font-medium tabular-nums w-7 text-right" :class="getQuotaTextClass(item.percent)">{{ item.percent }}%</span>
         </div>
       </div>
       <span v-else class="text-text-muted/50">-</span>
@@ -244,18 +233,11 @@ const emit = defineEmits(['switch', 'delete', 'select', 'account-updated', 'acco
 const hasSessionToken = computed(() => !!props.account.token?.workos_cursor_session_token)
 
 const {
-  planSpend,
   grokBotResetLabel,
-  primaryQuota,
-  secondaryQuotas,
+  quotaBars,
   getQuotaBarClass,
   getQuotaTextClass
 } = useCursorQuota(() => props.account)
-
-const planHint = computed(() => {
-  const base = $t('platform.cursor.planAvailableHint')
-  return planSpend.value ? `${base} · ${planSpend.value}` : base
-})
 
 const grokBotHint = computed(() => {
   const base = $t('platform.cursor.grokBotAvailableHint')
@@ -264,15 +246,8 @@ const grokBotHint = computed(() => {
     : base
 })
 
-const primaryQuotaHint = computed(() => {
-  if (!primaryQuota.value) return ''
-  return primaryQuota.value.key === 'plan'
-    ? planHint.value
-    : $t('platform.cursor.totalAvailableHint')
-})
-
-// 每个百分比的 tooltip 先声明「剩余可用」口径，再接各池说明
-const secondaryQuotaHint = (item) => {
+// 每条进度条的 tooltip 先声明「剩余可用」口径，再接各池说明
+const quotaBarHint = (item) => {
   const hint = item.key === 'grokBot' ? grokBotHint.value : $t(`platform.cursor.${item.key}AvailableHint`)
   return `${$t('platform.cursor.quotaRemainingHint')} · ${hint}`
 }
