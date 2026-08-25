@@ -1402,6 +1402,43 @@ export default {
     allData: 'All Data',
     allDataRange: 'All historical data'
   },
+  cursorSessions: {
+    title: 'Active Sessions',
+    entry: 'Active Sessions',
+    entryHint: 'View this account\'s active sessions and revoke devices you no longer use',
+    refresh: 'Refresh',
+    empty: 'No active sessions for this account',
+    noSessionToken: 'This account has no session token, active sessions are unavailable',
+    loadFailed: 'Failed to load active sessions',
+    columns: {
+      device: 'Device',
+      type: 'Type',
+      ip: 'IP',
+      location: 'Location',
+      lastActive: 'Last Active',
+      createdAt: 'Signed In',
+      actions: 'Actions'
+    },
+    types: {
+      web: 'Web',
+      client: 'Desktop App',
+      mobile: 'Mobile App',
+      chromeExtension: 'Chrome Extension'
+    },
+    currentBadge: 'Current device',
+    revoke: 'Revoke',
+    revoking: 'Revoking...',
+    revokeConfirmTitle: 'Revoke this session?',
+    revokeConfirmMessage: '"{device}" will be signed out and has to log in again.',
+    revokeCurrentConfirmTitle: 'Revoke the current session?',
+    revokeCurrentConfirmMessage:
+      '"{device}" is the session this account is currently using. Revoking it invalidates the session token stored here, so quota lookups and account switching will need a fresh token. Continue?',
+    revokeSuccess: 'Session revoked',
+    revokeFailed: 'Failed to revoke session',
+    unknownDevice: 'Unknown device',
+    details: 'Raw fields',
+    apiNote: 'Data comes from the private cursor.com dashboard API; fields follow whatever it returns'
+  },
   gptMailManager: {
     title: 'GPTMail',
     generateEmail: 'Generate Random Email',
