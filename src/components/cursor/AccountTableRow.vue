@@ -150,6 +150,17 @@
               </svg>
               <span>{{ $t('accountCard.copySessionToken') }}</span>
             </button>
+            <button
+              v-if="hasSessionToken"
+              @click="handleMenuClick('activeSessions', close)"
+              class="dropdown-item"
+              v-tooltip="$t('cursorSessions.entryHint')"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M4 6h16v10H4V6zm0-2c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h5v2h6v-2h5c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4z"/>
+              </svg>
+              <span>{{ $t('cursorSessions.entry') }}</span>
+            </button>
             <button @click="handleMenuClick('generateMachineId', close)" class="dropdown-item">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
@@ -190,6 +201,13 @@
     @close="showUsageModal = false"
     @account-synced="(id) => $emit('account-synced', id)"
   />
+
+  <!-- 登录设备模态框 -->
+  <CursorSessionsModal
+    v-if="showSessionsModal"
+    :account="account"
+    @close="showSessionsModal = false"
+  />
 </template>
 
 <script setup>
@@ -198,6 +216,7 @@ import { useI18n } from 'vue-i18n'
 import FloatingDropdown from '../common/FloatingDropdown.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
 import CursorUsageModal from './CursorUsageModal.vue'
+import CursorSessionsModal from './CursorSessionsModal.vue'
 import { useCursorQuota } from '../../composables/useCursorQuota'
 
 const { t: $t } = useI18n()
@@ -256,6 +275,7 @@ const quotaBarHint = (item) => {
 const menuRef = ref(null)
 const showTagEditor = ref(false)
 const showUsageModal = ref(false)
+const showSessionsModal = ref(false)
 const isGeneratingMachineId = ref(false)
 
 const maskedEmail = computed(() => {
@@ -370,6 +390,9 @@ const handleMenuClick = async (type, close) => {
       break
     case 'copySessionToken':
       await copySessionToken()
+      break
+    case 'activeSessions':
+      showSessionsModal.value = true
       break
     case 'generateMachineId':
       await generateAndBindMachineId()

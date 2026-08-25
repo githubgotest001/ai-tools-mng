@@ -1404,6 +1404,43 @@ export default {
     allData: '全部数据',
     allDataRange: '全部历史数据'
   },
+  cursorSessions: {
+    title: '登录设备',
+    entry: '登录设备',
+    entryHint: '查看该账号的活跃会话，并踢出不需要的设备',
+    refresh: '刷新',
+    empty: '该账号暂无活跃会话',
+    noSessionToken: '该账号没有 Session Token，无法查询登录设备',
+    loadFailed: '获取登录设备失败',
+    columns: {
+      device: '设备',
+      type: '类型',
+      ip: 'IP',
+      location: '地点',
+      lastActive: '最近活跃',
+      createdAt: '登录时间',
+      actions: '操作'
+    },
+    types: {
+      web: '网页',
+      client: '桌面端',
+      mobile: '移动端',
+      chromeExtension: 'Chrome 扩展'
+    },
+    currentBadge: '当前设备',
+    revoke: '踢出',
+    revoking: '踢出中...',
+    revokeConfirmTitle: '踢出该登录设备？',
+    revokeConfirmMessage: '将撤销「{device}」的登录状态，该设备需要重新登录。',
+    revokeCurrentConfirmTitle: '踢出当前设备？',
+    revokeCurrentConfirmMessage:
+      '「{device}」是本账号当前正在使用的会话。踢出后本工具保存的 Session Token 会立即失效，配额查询与账号切换都需要重新获取 Token。确认继续？',
+    revokeSuccess: '已踢出该登录设备',
+    revokeFailed: '踢出失败',
+    unknownDevice: '未知设备',
+    details: '原始字段',
+    apiNote: '数据来自 cursor.com 仪表盘的私有接口，字段以官方返回为准'
+  },
   gptMailManager: {
     title: 'GPTMail',
     generateEmail: '生成随机邮箱',
