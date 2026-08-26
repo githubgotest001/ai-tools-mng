@@ -464,6 +464,7 @@
       v-model:visible="showBatchTagEditor"
       :tokens="selectedAccounts"
       :all-tokens="allAccountsAsTokens"
+      :max-tags="MAX_ACCOUNT_TAGS"
       @save="handleBatchTagSave"
       @clear="handleBatchTagClear"
     />
@@ -552,6 +553,16 @@ import {
   matchesMembershipTypes,
   membershipTypeKey
 } from '@/utils/cursorSort'
+import {
+  MAX_ACCOUNT_TAGS,
+  accountHasAnyTag,
+  accountTags,
+  accountsAsTagTokens,
+  collectAccountTags,
+  countAccountsByTag,
+  countAccountsWithoutTag,
+  setAccountTags
+} from '@/utils/accountTags'
 
 const { t: $t } = useI18n()
 
@@ -651,45 +662,20 @@ const selectedAccounts = computed(() =>
   accounts.value
     .filter(a => selectedAccountIds.value.has(a.id))
     .map(acc => ({
-      tag_name: acc.tag || '',
-      tag_color: acc.tag_color || '',
+      tags: accountTags(acc),
       _account: acc // 保存原始账号引用
     }))
 )
 
 // 所有账号转换为标签格式
-const allAccountsAsTokens = computed(() =>
-  accounts.value.map(acc => ({
-    tag_name: acc.tag || '',
-    tag_color: acc.tag_color || ''
-  }))
-)
+const allAccountsAsTokens = computed(() => accountsAsTagTokens(accounts.value))
 
 // 提取所有唯一标签
-const allTags = computed(() => {
-  const tags = new Set()
-  accounts.value.forEach(a => {
-    if (a.tag?.trim()) {
-      tags.add(a.tag.trim())
-    }
-  })
-  return Array.from(tags).sort((a, b) => a.localeCompare(b, 'zh-CN'))
-})
+const allTags = computed(() => collectAccountTags(accounts.value).map(tag => tag.name))
 
-const tagCounts = computed(() => {
-  const counts = {}
-  accounts.value.forEach(a => {
-    const tag = a.tag?.trim()
-    if (tag) {
-      counts[tag] = (counts[tag] || 0) + 1
-    }
-  })
-  return counts
-})
+const tagCounts = computed(() => countAccountsByTag(accounts.value))
 
-const noTagCount = computed(() => {
-  return accounts.value.filter(a => !a.tag?.trim()).length
-})
+const noTagCount = computed(() => countAccountsWithoutTag(accounts.value))
 
 const membershipStatistics = computed(() => {
   const stats = { total: accounts.value.length }
@@ -735,14 +721,10 @@ const filteredAccounts = computed(() => {
         .map(tag => tag.toLowerCase())
     )
     result = result.filter(account => {
-      const tagName = account.tag?.trim() || ''
-      const isNoTag = !tagName
-      let matches = false
-      if (isNoTag) {
-        matches = hasNoTagFilter
-      } else {
-        matches = lowerSelectedTags.has(tagName.toLowerCase())
-      }
+      // 多标签下选中某个标签意味着「含有该标签」，命中任一即算匹配
+      const matches = accountTags(account).length === 0
+        ? hasNoTagFilter
+        : accountHasAnyTag(account, lowerSelectedTags)
       return tagFilterMode.value === 'include' ? matches : !matches
     })
   }
@@ -1152,14 +1134,12 @@ const clearSelection = () => {
   selectedAccountIds.value = new Set()
 }
 
-const handleBatchTagSave = async ({ tagName, tagColor }) => {
+const handleBatchTagSave = async ({ tags }) => {
   const ids = Array.from(selectedAccountIds.value)
   for (const id of ids) {
     const account = accounts.value.find(a => a.id === id)
     if (account) {
-      account.tag = tagName
-      account.tag_color = tagColor
-      account.updated_at = Math.floor(Date.now() / 1000)
+      setAccountTags(account, tags)
       try {
         await invoke('cursor_update_account', { account })
         markItemUpsertById(id)
@@ -1176,9 +1156,7 @@ const handleBatchTagClear = async () => {
   for (const id of ids) {
     const account = accounts.value.find(a => a.id === id)
     if (account) {
-      account.tag = ''
-      account.tag_color = ''
-      account.updated_at = Math.floor(Date.now() / 1000)
+      setAccountTags(account, [])
       try {
         await invoke('cursor_update_account', { account })
         markItemUpsertById(id)

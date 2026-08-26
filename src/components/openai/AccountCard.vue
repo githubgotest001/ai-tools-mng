@@ -349,27 +349,13 @@
           </svg>
           <span>{{ $t('subscriptions.fields.tag') }}</span>
         </div>
-        <div class="flex-1 text-[13px]">
-          <!-- 添加标签按钮（无标签时显示） -->
-          <span
-            v-if="!account.tag"
-            class="inline-flex items-center gap-0.5 px-1.5 py-0.5 border border-dashed border-border rounded text-text-muted text-xs cursor-pointer hover:border-accent hover:text-accent transition-colors"
-            @click.stop="openTagEditor"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-            </svg>
-            {{ $t('tokenList.clickToAddTag') }}
-          </span>
-          <!-- 标签（有标签时显示） -->
-          <span
-            v-else
-            class="badge editable badge--sm"
-            :style="{ '--tag-color': account.tag_color || DEFAULT_TAG_COLOR }"
-            @click.stop="openTagEditor"
-          >
-            {{ account.tag }}
-          </span>
+        <div class="flex-1 min-w-0 text-[13px]">
+          <TagBadges
+            :account="account"
+            :max="2"
+            empty-style="text"
+            @edit="openTagEditor"
+          />
         </div>
       </div>
     </div>
@@ -380,6 +366,7 @@
     v-model:visible="showTagEditor"
     :token="accountAsToken"
     :all-tokens="allAccountsAsTokens"
+    :max-tags="MAX_ACCOUNT_TAGS"
     @save="handleTagSave"
     @clear="handleTagClear"
   />
@@ -389,7 +376,10 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FloatingDropdown from '../common/FloatingDropdown.vue'
+import TagBadges from '../common/TagBadges.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
+import { useAccountTags } from '../../composables/useAccountTags'
+import { MAX_ACCOUNT_TAGS } from '../../utils/accountTags'
 import { getReverseProxyAction, toggleReverseProxyForAccount } from '@/utils/openaiReverseProxy'
 import { getAvailableOpenAIThirdPartyCredentialTemplates } from '@/utils/openaiThirdPartyCredentials'
 
@@ -441,9 +431,7 @@ const props = defineProps({
 const emit = defineEmits(['refresh-quota', 'reset-credits', 'delete', 'select', 'switch', 'account-updated', 'edit', 'copy-third-party-credentials'])
 
 const menuRef = ref(null)
-const showTagEditor = ref(false)
 const isMenuOpen = ref(false)
-const DEFAULT_TAG_COLOR = '#f97316'
 
 const isAccessTokenOnlyAccount = computed(() => {
   const token = props.account?.token
@@ -627,37 +615,14 @@ const handleCardClick = () => {
 }
 
 // 标签操作
-const accountAsToken = computed(() => ({
-  tag_name: props.account.tag || '',
-  tag_color: props.account.tag_color || ''
-}))
-
-const allAccountsAsTokens = computed(() =>
-  props.allAccounts.map(acc => ({
-    tag_name: acc.tag || '',
-    tag_color: acc.tag_color || ''
-  }))
-)
-
-const openTagEditor = () => {
-  showTagEditor.value = true
-}
-
-const handleTagSave = ({ tagName, tagColor }) => {
-  props.account.tag = tagName
-  props.account.tag_color = tagColor
-  props.account.updated_at = Math.floor(Date.now() / 1000)
-  emit('account-updated', props.account)
-  window.$notify?.success($t('messages.tagUpdated'))
-}
-
-const handleTagClear = () => {
-  props.account.tag = ''
-  props.account.tag_color = ''
-  props.account.updated_at = Math.floor(Date.now() / 1000)
-  emit('account-updated', props.account)
-  window.$notify?.success($t('messages.tagCleared'))
-}
+const {
+  showTagEditor,
+  accountAsToken,
+  allAccountsAsTokens,
+  openTagEditor,
+  handleTagSave,
+  handleTagClear
+} = useAccountTags(props, emit)
 
 const reverseProxyAction = computed(() => getReverseProxyAction(props.account))
 

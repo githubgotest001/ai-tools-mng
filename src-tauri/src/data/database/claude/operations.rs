@@ -1,5 +1,17 @@
+use crate::data::storage::common::{
+    AccountTag, tags_from_json, tags_or_legacy, tags_to_json,
+};
 use crate::platforms::claude::Account;
-use tokio_postgres::Client as PgClient;
+use tokio_postgres::{Client as PgClient, Row};
+
+/// tags 列为空时回退到旧的 tag / tag_color，存量账号的标签才不会消失
+fn row_tags(row: &Row, tag: Option<&String>, tag_color: Option<&String>) -> Vec<AccountTag> {
+    tags_or_legacy(
+        tags_from_json(row.try_get(19).ok().flatten()),
+        tag.map(String::as_str),
+        tag_color.map(String::as_str),
+    )
+}
 
 pub async fn list_accounts(
     client: &PgClient,
@@ -7,13 +19,15 @@ pub async fn list_accounts(
     let rows = client.query(
         "SELECT id, service_name, website_url, start_date, duration_days, expiry_date, tag, tag_color, notes,
                 base_url, auth_token, default_opus_model, default_sonnet_model, default_haiku_model, use_model,
-                created_at, updated_at, deleted, version
+                created_at, updated_at, deleted, version, tags
          FROM claude_accounts WHERE deleted = FALSE ORDER BY created_at DESC",
         &[],
     ).await?;
 
     let mut accounts = Vec::new();
     for row in rows.iter() {
+        let tag: Option<String> = row.get(6);
+        let tag_color: Option<String> = row.get(7);
         let account = Account {
             id: row.get(0),
             service_name: row.get(1),
@@ -21,8 +35,9 @@ pub async fn list_accounts(
             start_date: row.get(3),
             duration_days: row.get(4),
             expiry_date: row.get(5),
-            tag: row.get(6),
-            tag_color: row.get(7),
+            tags: row_tags(row, tag.as_ref(), tag_color.as_ref()),
+            tag,
+            tag_color,
             notes: row.get(8),
             base_url: row.get(9),
             auth_token: row.get(10),
@@ -48,12 +63,14 @@ pub async fn get_account(
     let rows = client.query(
         "SELECT id, service_name, website_url, start_date, duration_days, expiry_date, tag, tag_color, notes,
                 base_url, auth_token, default_opus_model, default_sonnet_model, default_haiku_model, use_model,
-                created_at, updated_at, deleted, version
+                created_at, updated_at, deleted, version, tags
          FROM claude_accounts WHERE id = $1 AND deleted = FALSE",
         &[&id],
     ).await?;
 
     if let Some(row) = rows.first() {
+        let tag: Option<String> = row.get(6);
+        let tag_color: Option<String> = row.get(7);
         Ok(Some(Account {
             id: row.get(0),
             service_name: row.get(1),
@@ -61,8 +78,9 @@ pub async fn get_account(
             start_date: row.get(3),
             duration_days: row.get(4),
             expiry_date: row.get(5),
-            tag: row.get(6),
-            tag_color: row.get(7),
+            tags: row_tags(row, tag.as_ref(), tag_color.as_ref()),
+            tag,
+            tag_color,
             notes: row.get(8),
             base_url: row.get(9),
             auth_token: row.get(10),
@@ -88,8 +106,8 @@ pub async fn insert_account(
         "INSERT INTO claude_accounts
             (id, service_name, website_url, start_date, duration_days, expiry_date, tag, tag_color, notes,
              base_url, auth_token, default_opus_model, default_sonnet_model, default_haiku_model, use_model,
-             created_at, updated_at, deleted, version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
+             created_at, updated_at, deleted, version, tags)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)",
         &[
             &account.id,
             &account.service_name,
@@ -110,6 +128,7 @@ pub async fn insert_account(
             &account.updated_at,
             &account.deleted,
             &account.version,
+            &tags_to_json(&account.tags),
         ],
     ).await?;
     Ok(())
@@ -124,7 +143,7 @@ pub async fn update_account(
          SET service_name = $2, website_url = $3, start_date = $4, duration_days = $5, expiry_date = $6,
              tag = $7, tag_color = $8, notes = $9, base_url = $10, auth_token = $11,
              default_opus_model = $12, default_sonnet_model = $13, default_haiku_model = $14, use_model = $15,
-             updated_at = $16, version = $17
+             updated_at = $16, version = $17, tags = $18
          WHERE id = $1",
         &[
             &account.id,
@@ -144,6 +163,7 @@ pub async fn update_account(
             &account.use_model,
             &account.updated_at,
             &account.version,
+            &tags_to_json(&account.tags),
         ],
     ).await?;
     Ok(())
@@ -169,13 +189,15 @@ pub async fn get_pending_sync_operations(
     let upserts = client.query(
         "SELECT id, service_name, website_url, start_date, duration_days, expiry_date, tag, tag_color, notes,
                 base_url, auth_token, default_opus_model, default_sonnet_model, default_haiku_model, use_model,
-                created_at, updated_at, deleted, version
+                created_at, updated_at, deleted, version, tags
          FROM claude_accounts WHERE deleted = FALSE ORDER BY updated_at DESC",
         &[],
     ).await?;
 
     let mut accounts = Vec::new();
     for row in upserts.iter() {
+        let tag: Option<String> = row.get(6);
+        let tag_color: Option<String> = row.get(7);
         let account = Account {
             id: row.get(0),
             service_name: row.get(1),
@@ -183,8 +205,9 @@ pub async fn get_pending_sync_operations(
             start_date: row.get(3),
             duration_days: row.get(4),
             expiry_date: row.get(5),
-            tag: row.get(6),
-            tag_color: row.get(7),
+            tags: row_tags(row, tag.as_ref(), tag_color.as_ref()),
+            tag,
+            tag_color,
             notes: row.get(8),
             base_url: row.get(9),
             auth_token: row.get(10),

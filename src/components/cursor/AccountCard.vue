@@ -258,25 +258,13 @@
           </svg>
           <span>{{ $t('subscriptions.fields.tag') }}</span>
         </div>
-        <div class="flex-1 text-[13px]">
-          <span
-            v-if="!account.tag"
-            class="inline-flex items-center gap-0.5 px-1.5 py-0.5 border border-dashed border-border rounded text-text-muted text-xs cursor-pointer hover:border-accent hover:text-accent transition-colors"
-            @click.stop="openTagEditor"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-            </svg>
-            {{ $t('tokenList.clickToAddTag') }}
-          </span>
-          <span
-            v-else
-            class="badge editable badge--sm"
-            :style="{ '--tag-color': account.tag_color || DEFAULT_TAG_COLOR }"
-            @click.stop="openTagEditor"
-          >
-            {{ account.tag }}
-          </span>
+        <div class="flex-1 min-w-0 text-[13px]">
+          <TagBadges
+            :account="account"
+            :max="2"
+            empty-style="text"
+            @edit="openTagEditor"
+          />
         </div>
       </div>
     </div>
@@ -287,6 +275,7 @@
     v-model:visible="showTagEditor"
     :token="accountAsToken"
     :all-tokens="allAccountsAsTokens"
+    :max-tags="MAX_ACCOUNT_TAGS"
     @save="handleTagSave"
     @clear="handleTagClear"
   />
@@ -311,11 +300,14 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FloatingDropdown from '../common/FloatingDropdown.vue'
+import TagBadges from '../common/TagBadges.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
 import CursorUsageModal from './CursorUsageModal.vue'
 import CursorSessionsModal from './CursorSessionsModal.vue'
+import { useAccountTags } from '../../composables/useAccountTags'
 import { useCursorQuota } from '../../composables/useCursorQuota'
 import { isCursorSessionInvalid } from '../../utils/cursorUsage'
+import { MAX_ACCOUNT_TAGS } from '../../utils/accountTags'
 
 const { t: $t } = useI18n()
 
@@ -333,12 +325,10 @@ const props = defineProps({
 const emit = defineEmits(['switch', 'delete', 'select', 'account-updated', 'account-synced', 'machine-id-generated', 'refresh-quota'])
 
 const menuRef = ref(null)
-const showTagEditor = ref(false)
 const showUsageModal = ref(false)
 const showSessionsModal = ref(false)
 const isMenuOpen = ref(false)
 const isGeneratingMachineId = ref(false)
-const DEFAULT_TAG_COLOR = '#f97316'
 
 // 订阅计划徽章样式
 const getMembershipBadgeClass = (type) => {
@@ -372,10 +362,14 @@ const grokBotHint = computed(() => {
     : base
 })
 
-// 每条进度条的 tooltip 先声明「剩余可用」口径，再接各池说明
+// 每条进度条的 tooltip：金额（拿到才显示）在前，再接「剩余可用」口径与各池说明
 const quotaBarHint = (item) => {
   const hint = item.key === 'grokBot' ? grokBotHint.value : $t(`platform.cursor.${item.key}AvailableHint`)
-  return `${$t('platform.cursor.quotaRemainingHint')} · ${hint}`
+  const parts = [$t('platform.cursor.quotaRemainingHint'), hint]
+  if (item.spend) {
+    parts.unshift($t('platform.cursor.poolSpend', { spend: item.spend }))
+  }
+  return parts.join(' · ')
 }
 
 const billingCycleTooltip = computed(() =>
@@ -565,36 +559,13 @@ const exportAccount = async () => {
 }
 
 // 标签操作
-const accountAsToken = computed(() => ({
-  tag_name: props.account.tag || '',
-  tag_color: props.account.tag_color || ''
-}))
-
-const allAccountsAsTokens = computed(() =>
-  props.allAccounts.map(acc => ({
-    tag_name: acc.tag || '',
-    tag_color: acc.tag_color || ''
-  }))
-)
-
-const openTagEditor = () => {
-  showTagEditor.value = true
-}
-
-const handleTagSave = ({ tagName, tagColor }) => {
-  props.account.tag = tagName
-  props.account.tag_color = tagColor
-  props.account.updated_at = Math.floor(Date.now() / 1000)
-  emit('account-updated', props.account)
-  window.$notify?.success($t('messages.tagUpdated'))
-}
-
-const handleTagClear = () => {
-  props.account.tag = ''
-  props.account.tag_color = ''
-  props.account.updated_at = Math.floor(Date.now() / 1000)
-  emit('account-updated', props.account)
-  window.$notify?.success($t('messages.tagCleared'))
-}
+const {
+  showTagEditor,
+  accountAsToken,
+  allAccountsAsTokens,
+  openTagEditor,
+  handleTagSave,
+  handleTagClear
+} = useAccountTags(props, emit)
 </script>
 

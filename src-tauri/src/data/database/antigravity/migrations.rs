@@ -122,6 +122,13 @@ pub async fn add_new_fields_if_not_exist(
             &[],
         )
         .await?;
+    // 多标签列表；旧的 tag / tag_color 保留为首项镜像
+    _client
+        .execute(
+            "ALTER TABLE antigravity_accounts ADD COLUMN IF NOT EXISTS tags JSONB",
+            &[],
+        )
+        .await?;
     _client
         .execute(
             "ALTER TABLE antigravity_accounts ADD COLUMN IF NOT EXISTS oauth_client_key TEXT",

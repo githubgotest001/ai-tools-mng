@@ -3,6 +3,7 @@ pub mod local_storage;
 pub mod postgres_storage;
 pub mod sqlite_dual_storage;
 pub mod sqlite_storage;
+pub mod tags;
 pub mod traits;
 
 pub use dual_storage::*;
@@ -10,4 +11,5 @@ pub use local_storage::*;
 pub use postgres_storage::*;
 pub use sqlite_dual_storage::*;
 pub use sqlite_storage::*;
+pub use tags::*;
 pub use traits::*;

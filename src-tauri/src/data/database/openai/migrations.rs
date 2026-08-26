@@ -103,7 +103,8 @@ pub async fn add_new_fields_if_not_exist(
     ];
 
     // 添加标签字段
-    let tag_columns = vec![("tag", "TEXT"), ("tag_color", "TEXT")];
+    // tags 是多标签列表，tag / tag_color 保留为首项镜像
+    let tag_columns = vec![("tag", "TEXT"), ("tag_color", "TEXT"), ("tags", "JSONB")];
 
     // 添加账号类型和 API 配置字段
     let api_columns = vec![

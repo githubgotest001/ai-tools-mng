@@ -119,27 +119,48 @@
         <!-- 标签 -->
         <div class="form-group">
           <label class="label">{{ $t('platform.claude.dialog.fields.tag') }}</label>
+          <!-- 已添加的标签，点 × 移除 -->
+          <div v-if="tags.length" class="flex flex-wrap items-center gap-1.5 mb-2">
+            <span
+              v-for="(tag, index) in tags"
+              :key="tag.name"
+              class="badge editable"
+              :style="{ '--tag-color': tag.color }"
+            >
+              {{ tag.name }}
+              <button
+                type="button"
+                class="ml-0.5 opacity-60 hover:opacity-100"
+                :title="$t('tokenForm.clearTag')"
+                @click="removeTag(index)"
+              >
+                ×
+              </button>
+            </span>
+          </div>
           <div class="flex gap-2.5 items-center">
             <!-- 标签名称输入 + 下拉建议 -->
             <div class="dropdown flex-1 relative" @click="showTagSuggestions = true">
               <input
                 ref="tagNameInputRef"
-                v-model="formData.tag"
+                v-model="tagDraftName"
                 type="text"
                 class="input !pr-9"
                 :placeholder="$t('platform.claude.dialog.placeholders.tag')"
                 maxlength="20"
+                :disabled="isTagLimitReached"
                 @input="handleTagInput"
                 @focus="showTagSuggestions = true"
                 @blur="handleTagBlur"
+                @keydown.enter.prevent="commitDraft"
                 @click.stop="showTagSuggestions = true"
               />
               <button
-                v-if="formData.tag"
+                v-if="tagDraftName"
                 type="button"
                 class="btn btn--ghost btn--icon-sm absolute right-1.5 top-1/2 -translate-y-1/2"
                 :title="$t('common.clear')"
-                @click="formData.tag = ''"
+                @click="tagDraftName = ''"
               >
                 ×
               </button>
@@ -168,16 +189,29 @@
             <div class="relative shrink-0">
               <div
                 class="w-[42px] h-[42px] border-2 border-border rounded-full shadow-sm"
-                :style="{ backgroundColor: formData.tag_color }"
+                :style="{ backgroundColor: tagDraftColor }"
               ></div>
               <input
                 type="color"
-                v-model="formData.tag_color"
+                v-model="tagDraftColor"
                 :title="$t('platform.claude.dialog.fields.tagColor')"
                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
             </div>
+            <button
+              type="button"
+              class="btn btn--secondary btn--sm shrink-0"
+              :disabled="!tagDraftName.trim() || isTagLimitReached"
+              @click="commitDraft"
+            >
+              {{ $t('tokenForm.addTag') }}
+            </button>
           </div>
+          <p class="text-xs text-text-tertiary mt-1">
+            {{ isTagLimitReached
+              ? $t('tokenForm.tagLimitReached', { max: MAX_ACCOUNT_TAGS })
+              : $t('tokenForm.tagLimitHint', { max: MAX_ACCOUNT_TAGS }) }}
+          </p>
         </div>
 
         <!-- 备注 -->
@@ -308,6 +342,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseModal from '@/components/common/BaseModal.vue'
 import FloatingDropdown from '@/components/common/FloatingDropdown.vue'
+import {
+  DEFAULT_TAG_COLOR,
+  MAX_ACCOUNT_TAGS,
+  accountTags,
+  collectAccountTags,
+  setAccountTags
+} from '@/utils/accountTags'
 
 const { t: $t } = useI18n()
 
@@ -373,8 +414,6 @@ const formData = ref({
   duration_value: null,
   duration_unit: 'days',
   expiry_date: '',
-  tag: '',
-  tag_color: '#f97316',
   notes: '',
   base_url: '',
   auth_token: '',
@@ -428,39 +467,29 @@ const selectDurationUnit = (unit) => {
   calculateExpiryDate()
 }
 
-// 标签建议相关
+// 标签编辑相关：tags 是已确认的标签，输入框里的是待添加的草稿
+const tags = ref([])
+const tagDraftName = ref('')
+const tagDraftColor = ref(DEFAULT_TAG_COLOR)
 const showTagSuggestions = ref(false)
 const tagNameInputRef = ref(null)
 
+const isTagLimitReached = computed(() => tags.value.length >= MAX_ACCOUNT_TAGS)
+
 // 从所有账户中提取已使用的标签
-const existingTags = computed(() => {
-  if (!props.allAccounts) return []
-  const tagMap = new Map()
+const existingTags = computed(() => collectAccountTags(props.allAccounts))
 
-  props.allAccounts.forEach(acc => {
-    if (acc.tag && acc.tag_color) {
-      if (!tagMap.has(acc.tag)) {
-        tagMap.set(acc.tag, {
-          name: acc.tag,
-          color: acc.tag_color
-        })
-      }
-    }
-  })
-
-  return Array.from(tagMap.values())
-    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
-})
-
-// 根据输入过滤标签建议
+// 根据输入过滤标签建议；已经加上的标签不再出现在建议里
 const filteredTagSuggestions = computed(() => {
-  const input = formData.value.tag.trim().toLowerCase()
+  const chosen = new Set(tags.value.map(tag => tag.name.toLowerCase()))
+  const available = existingTags.value.filter(tag => !chosen.has(tag.name.toLowerCase()))
+  const input = tagDraftName.value.trim().toLowerCase()
 
   if (!input) {
-    return existingTags.value
+    return available
   }
 
-  return existingTags.value.filter(tag =>
+  return available.filter(tag =>
     tag.name.toLowerCase().includes(input)
   )
 })
@@ -477,11 +506,28 @@ const handleTagBlur = () => {
   }, 200)
 }
 
-// 选择标签建议
+// 选择标签建议：直接入列，省掉再点一次「添加」
 const selectTagSuggestion = (suggestion) => {
-  formData.value.tag = suggestion.name
-  formData.value.tag_color = suggestion.color
+  tagDraftName.value = suggestion.name
+  tagDraftColor.value = suggestion.color
   showTagSuggestions.value = false
+  commitDraft()
+}
+
+/** 把输入框里的草稿收进标签列表（重名或超上限则忽略） */
+const commitDraft = () => {
+  const name = tagDraftName.value.trim()
+  if (!name || isTagLimitReached.value) return
+  const exists = tags.value.some(tag => tag.name.toLowerCase() === name.toLowerCase())
+  if (!exists) {
+    tags.value = [...tags.value, { name, color: tagDraftColor.value }]
+  }
+  tagDraftName.value = ''
+  tagDraftColor.value = DEFAULT_TAG_COLOR
+}
+
+const removeTag = (index) => {
+  tags.value = tags.value.filter((_, i) => i !== index)
 }
 
 // 是否可以提交
@@ -494,6 +540,9 @@ const canSubmit = computed(() => {
 // 提交表单
 const handleSubmit = () => {
   if (!canSubmit.value) return
+
+  // 输入框还留着字就一并收进去，用户不必先点「添加」再点「保存」
+  commitDraft()
 
   // 将时长转换为天数
   let durationDays = 0
@@ -520,8 +569,6 @@ const handleSubmit = () => {
     start_date: dateToTimestamp(formData.value.start_date) || 0,
     duration_days: durationDays,
     expiry_date: dateToTimestamp(formData.value.expiry_date) || 0,
-    tag: formData.value.tag?.trim() || '',
-    tag_color: formData.value.tag_color || '#f97316',
     notes: formData.value.notes?.trim() || '',
     base_url: formData.value.base_url.trim(),
     auth_token: formData.value.auth_token.trim(),
@@ -531,12 +578,17 @@ const handleSubmit = () => {
     use_model: formData.value.use_model || 'default'
   }
 
+  // 输入框里还留着字就一并收进去，用户不必先点「添加」再点保存
+  commitDraft()
+  setAccountTags(result, tags.value)
+
   emit('save', result)
 }
 
 // 初始化表单数据
 onMounted(() => {
   if (props.account) {
+    tags.value = accountTags(props.account)
     formData.value = {
       service_name: props.account.service_name || '',
       website_url: props.account.website_url || '',
@@ -544,8 +596,6 @@ onMounted(() => {
       duration_value: props.account.duration_days || null,
       duration_unit: 'days',
       expiry_date: formatDateForInput(props.account.expiry_date),
-      tag: props.account.tag || '',
-      tag_color: props.account.tag_color || '#f97316',
       notes: props.account.notes || '',
       base_url: props.account.base_url || '',
       auth_token: props.account.auth_token || '',

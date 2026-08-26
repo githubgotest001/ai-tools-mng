@@ -1,4 +1,6 @@
-use crate::data::storage::common::{AccountDbMapper, StorageError};
+use crate::data::storage::common::{
+    AccountDbMapper, StorageError, tags_from_json, tags_or_legacy, tags_to_json,
+};
 use crate::platforms::openai::models::{
     Account, AccountType, ApiConfig, QuotaData, QuotaRefreshState, QuotaStatus, TokenData,
 };
@@ -118,6 +120,15 @@ impl AccountDbMapper<Account> for OpenAIAccountMapper {
             stale_after: row.try_get(48).ok().flatten(),
         };
 
+        // tags 列为空时回退到旧的 tag / tag_color，存量账号的标签才不会消失
+        let tag: Option<String> = row.try_get(16).ok().flatten();
+        let tag_color: Option<String> = row.try_get(17).ok().flatten();
+        let tags = tags_or_legacy(
+            tags_from_json(row.try_get(49).ok().flatten()),
+            tag.as_deref(),
+            tag_color.as_deref(),
+        );
+
         Ok(Account {
             id: row.get(0),
             email: row.get(1),
@@ -131,8 +142,9 @@ impl AccountDbMapper<Account> for OpenAIAccountMapper {
             openai_auth_json: row.try_get(33).ok().flatten(),
             quota,
             quota_refresh,
-            tag: row.try_get(16).ok().flatten(),
-            tag_color: row.try_get(17).ok().flatten(),
+            tag,
+            tag_color,
+            tags,
             created_at: row.get(11),
             last_used: row.get(12),
             updated_at: row.get(13),
@@ -154,7 +166,7 @@ impl AccountDbMapper<Account> for OpenAIAccountMapper {
          openai_auth_json, is_forbidden, rt_invalid, rt_invalid_reason, reverse_proxy_enabled, \
          quota_status, quota_allowed, quota_limit_reached, reset_credits_available, reset_credits_total, \
          quota_last_attempt_at, quota_last_success_at, quota_next_check_at, quota_consecutive_failures, \
-         quota_last_error, quota_stale_after"
+         quota_last_error, quota_stale_after, tags"
     }
 
     fn insert_sql() -> &'static str {
@@ -169,8 +181,8 @@ impl AccountDbMapper<Account> for OpenAIAccountMapper {
              is_forbidden, rt_invalid, rt_invalid_reason, reverse_proxy_enabled, quota_status,
              quota_allowed, quota_limit_reached, reset_credits_available, reset_credits_total,
              quota_last_attempt_at, quota_last_success_at, quota_next_check_at,
-             quota_consecutive_failures, quota_last_error, quota_stale_after)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)
+             quota_consecutive_failures, quota_last_error, quota_stale_after, tags)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50)
         ON CONFLICT (id) DO UPDATE SET
             email = EXCLUDED.email,
             access_token = EXCLUDED.access_token,
@@ -218,7 +230,8 @@ impl AccountDbMapper<Account> for OpenAIAccountMapper {
             quota_next_check_at = EXCLUDED.quota_next_check_at,
             quota_consecutive_failures = EXCLUDED.quota_consecutive_failures,
             quota_last_error = EXCLUDED.quota_last_error,
-            quota_stale_after = EXCLUDED.quota_stale_after
+            quota_stale_after = EXCLUDED.quota_stale_after,
+            tags = EXCLUDED.tags
         "#
     }
 
@@ -372,6 +385,7 @@ impl AccountDbMapper<Account> for OpenAIAccountMapper {
             Box::new(account.quota_refresh.consecutive_failures as i64),
             Box::new(account.quota_refresh.last_error.clone()),
             Box::new(account.quota_refresh.stale_after),
+            Box::new(tags_to_json(&account.tags)),
         ]
     }
 }

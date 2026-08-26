@@ -3,6 +3,7 @@ pub mod db;
 pub mod grok_bot;
 pub mod machine;
 pub mod mapper;
+pub mod pool_spend;
 pub mod process;
 pub mod sessions;
 pub mod storage;

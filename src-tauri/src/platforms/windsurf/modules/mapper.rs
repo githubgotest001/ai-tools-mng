@@ -1,4 +1,6 @@
-use crate::data::storage::common::{AccountDbMapper, StorageError};
+use crate::data::storage::common::{
+    AccountDbMapper, StorageError, tags_from_json, tags_or_legacy, tags_to_json,
+};
 use crate::platforms::windsurf::models::{Account, QuotaData, TokenData};
 use tokio_postgres::Row;
 
@@ -16,6 +18,15 @@ impl AccountDbMapper<Account> for WindsurfAccountMapper {
             None => None,
         };
 
+        // tags 列为空时回退到旧的 tag / tag_color，存量账号的标签才不会消失
+        let tag: Option<String> = row.get(15);
+        let tag_color: Option<String> = row.get(16);
+        let tags = tags_or_legacy(
+            tags_from_json(row.get(23)),
+            tag.as_deref(),
+            tag_color.as_deref(),
+        );
+
         Ok(Account {
             id: row.get(0),
             email: email.clone(),
@@ -30,8 +41,9 @@ impl AccountDbMapper<Account> for WindsurfAccountMapper {
             api_key: row.get(7),
             api_server_url: row.get(8),
             quota,
-            tag: row.get(15),
-            tag_color: row.get(16),
+            tag,
+            tag_color,
+            tags,
             disabled: row.get(9),
             disabled_reason: row.get(10),
             disabled_at: row.get(11),
@@ -51,7 +63,7 @@ impl AccountDbMapper<Account> for WindsurfAccountMapper {
         "id, email, name, access_token, refresh_token, expiry_timestamp, user_id, \
          api_key, api_server_url, disabled, disabled_reason, disabled_at, \
          created_at, last_used, quota, tag, tag_color, updated_at, version, \
-         auth_provider, devin_auth1_token, devin_account_id, devin_primary_org_id"
+         auth_provider, devin_auth1_token, devin_account_id, devin_primary_org_id, tags"
     }
 
     fn insert_sql() -> &'static str {
@@ -59,8 +71,9 @@ impl AccountDbMapper<Account> for WindsurfAccountMapper {
         INSERT INTO windsurf_accounts
             (id, email, name, access_token, refresh_token, expiry_timestamp, user_id,
              api_key, api_server_url, quota, tag, tag_color, disabled, disabled_reason, disabled_at, created_at,
-             last_used, updated_at, version, deleted, auth_provider, devin_auth1_token, devin_account_id, devin_primary_org_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+             last_used, updated_at, version, deleted, auth_provider, devin_auth1_token, devin_account_id, devin_primary_org_id,
+             tags)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
         ON CONFLICT (id) DO UPDATE SET
             email = EXCLUDED.email,
             name = EXCLUDED.name,
@@ -83,7 +96,8 @@ impl AccountDbMapper<Account> for WindsurfAccountMapper {
             auth_provider = EXCLUDED.auth_provider,
             devin_auth1_token = EXCLUDED.devin_auth1_token,
             devin_account_id = EXCLUDED.devin_account_id,
-            devin_primary_org_id = EXCLUDED.devin_primary_org_id
+            devin_primary_org_id = EXCLUDED.devin_primary_org_id,
+            tags = EXCLUDED.tags
         "#
     }
 
@@ -122,6 +136,7 @@ impl AccountDbMapper<Account> for WindsurfAccountMapper {
             Box::new(account.devin_auth1_token.clone()),
             Box::new(account.devin_account_id.clone()),
             Box::new(account.devin_primary_org_id.clone()),
+            Box::new(tags_to_json(&account.tags)),
         ]
     }
 }

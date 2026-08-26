@@ -1,4 +1,4 @@
-use crate::data::storage::common::SyncableAccount;
+use crate::data::storage::common::{AccountTag, SyncableAccount};
 use serde::{Deserialize, Serialize};
 
 /// Claude 账号数据结构
@@ -10,8 +10,12 @@ pub struct Account {
     pub start_date: i64,
     pub duration_days: i64,
     pub expiry_date: i64,
+    /// 用户标签（`tags` 首项的镜像，供旧版本客户端读取）
     pub tag: Option<String>,
     pub tag_color: Option<String>,
+    /// 用户标签列表，最多 MAX_ACCOUNT_TAGS 个
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<AccountTag>,
     pub notes: Option<String>,
     pub base_url: String,
     pub auth_token: String,
@@ -87,6 +91,7 @@ impl Account {
             expiry_date,
             tag: None,
             tag_color: None,
+            tags: Vec::new(),
             notes: None,
             base_url,
             auth_token,

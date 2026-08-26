@@ -55,14 +55,17 @@
         <div v-if="totalRemainingPercent !== null" class="rounded-md border border-border px-3 py-2">
           <div class="text-[11px] text-text-muted" v-tooltip="$t('platform.cursor.totalAvailableHint')">{{ $t('platform.cursor.totalAvailable') }}</div>
           <div class="text-sm font-semibold tabular-nums">{{ totalRemainingPercent }}%</div>
+          <div v-if="totalSpend" class="text-[11px] text-text-muted tabular-nums" v-tooltip="$t('platform.cursor.poolLimitEstimated')">{{ totalSpend }}</div>
         </div>
         <div v-if="autoRemainingPercent !== null" class="rounded-md border border-border px-3 py-2">
           <div class="text-[11px] text-text-muted" v-tooltip="$t('platform.cursor.autoAvailableHint')">{{ $t('platform.cursor.autoAvailable') }}</div>
           <div class="text-sm font-semibold tabular-nums">{{ autoRemainingPercent }}%</div>
+          <div v-if="autoSpend" class="text-[11px] text-text-muted tabular-nums" v-tooltip="$t('platform.cursor.poolLimitEstimated')">{{ autoSpend }}</div>
         </div>
         <div v-if="apiRemainingPercent !== null" class="rounded-md border border-border px-3 py-2">
           <div class="text-[11px] text-text-muted" v-tooltip="$t('platform.cursor.apiAvailableHint')">{{ $t('platform.cursor.apiAvailable') }}</div>
           <div class="text-sm font-semibold tabular-nums">{{ apiRemainingPercent }}%</div>
+          <div v-if="apiSpend" class="text-[11px] text-text-muted tabular-nums" v-tooltip="$t('platform.cursor.poolLimitEstimated')">{{ apiSpend }}</div>
         </div>
         <div v-if="showGrokBot" class="rounded-md border border-border px-3 py-2">
           <div class="text-[11px] text-text-muted" v-tooltip="$t('platform.cursor.grokBotAvailableHint')">{{ $t('platform.cursor.grokBotAvailable') }}</div>
@@ -205,7 +208,10 @@ const {
   autoRemainingPercent,
   apiRemainingPercent,
   grokBotRemaining,
-  showGrokBot
+  showGrokBot,
+  autoSpend,
+  apiSpend,
+  totalSpend
 } = useCursorQuota(() => props.account)
 const QUOTA_GRID_CLASSES = ['grid-cols-1', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4', 'grid-cols-5']
 const quotaGridClass = computed(() => {
