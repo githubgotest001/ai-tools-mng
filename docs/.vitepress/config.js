@@ -70,6 +70,6 @@ export default {
   },
   themeConfig: {
     i18nRouting: true,
-    socialLinks: [{ icon: 'github', link: 'https://github.com/cubezhao/ai-tools-mng' }]
+    socialLinks: [{ icon: 'github', link: 'https://github.com/githubgotest001/ai-tools-mng' }]
   }
 }

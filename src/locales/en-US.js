@@ -48,7 +48,6 @@ export default {
     title: 'AI Tools Manager',
     appHome: 'App Repository',
     pluginHome: 'Plugin Repository',
-    telegramGroup: 'ATM Group Chat',
     viewTokens: 'View Tokens',
     bookmarkManager: 'Bookmark Manager',
     outlookManager: 'Outlook Manager',

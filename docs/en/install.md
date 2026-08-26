@@ -20,7 +20,7 @@ scoop update atm
 
 ## Release builds
 
-Download installers from [Releases](https://github.com/cubezhao/ai-tools-mng/releases).
+Download installers from [Releases](https://github.com/githubgotest001/ai-tools-mng/releases).
 
 ## Build from source
 

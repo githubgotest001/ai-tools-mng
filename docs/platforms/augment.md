@@ -17,4 +17,4 @@
 ## 插件
 
 - VSCode 及 Fork：使用 [Augment Code Auto](https://github.com/cubezhao/augment-code-auto)。
-- JetBrains：从 [Releases](https://github.com/cubezhao/ai-tools-mng/releases) 下载对应插件（使用可能带来封号风险，请自行权衡）。
+- JetBrains：从 [Releases](https://github.com/githubgotest001/ai-tools-mng/releases) 下载对应插件（使用可能带来封号风险，请自行权衡）。

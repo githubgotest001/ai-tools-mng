@@ -48,7 +48,6 @@ export default {
     title: 'AI Tools Manager',
     appHome: 'App仓库',
     pluginHome: '插件仓库',
-    telegramGroup: 'ATM群聊',
     viewTokens: '查看Token',
     bookmarkManager: '书签管理', // legacy, use bookmarks.title
     outlookManager: '邮箱管理',

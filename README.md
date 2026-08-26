@@ -61,7 +61,7 @@ scoop uninstall atm
 ```
 
 ### Release 下载安装
-在[Release](https://github.com/cubezhao/ai-tools-mng/releases) 中根据平台选择对应的安装包进行安装即可
+在[Release](https://github.com/githubgotest001/ai-tools-mng/releases) 中根据平台选择对应的安装包进行安装即可
 
 ### 安装问题
 MacOS平台安装之后出现“ATM.app已损坏，无法打开...”，在终端执行以下命令即可
@@ -159,4 +159,4 @@ cargo tauri build    # 构建生产版本
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=cubezhao/ai-tools-mng&type=Date)](https://star-history.com/#cubezhao/ai-tools-mng&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=githubgotest001/ai-tools-mng&type=Date)](https://star-history.com/#githubgotest001/ai-tools-mng&Date)

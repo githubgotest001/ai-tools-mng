@@ -21,7 +21,7 @@ scoop update atm
 
 ## Release 下载
 
-在 [Releases](https://github.com/cubezhao/ai-tools-mng/releases) 中按平台下载安装包。
+在 [Releases](https://github.com/githubgotest001/ai-tools-mng/releases) 中按平台下载安装包。
 
 ## 从源码构建
 

@@ -62,7 +62,7 @@ scoop uninstall atm
 
 ### Release builds
 
-Download installers from [Releases](https://github.com/cubezhao/ai-tools-mng/releases).
+Download installers from [Releases](https://github.com/githubgotest001/ai-tools-mng/releases).
 
 ### Install issues
 
@@ -159,4 +159,4 @@ If this project helps you, you can buy me a coffee.
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=cubezhao/ai-tools-mng&type=Date)](https://star-history.com/#cubezhao/ai-tools-mng&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=githubgotest001/ai-tools-mng&type=Date)](https://star-history.com/#githubgotest001/ai-tools-mng&Date)

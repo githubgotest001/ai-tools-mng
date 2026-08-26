@@ -17,4 +17,4 @@ Manage Augment Code access tokens and accounts.
 ## Plugins
 
 - VSCode and forks: [Augment Code Auto](https://github.com/cubezhao/augment-code-auto).
-- JetBrains: Download from [Releases](https://github.com/cubezhao/ai-tools-mng/releases) (use at your own risk regarding account policy).
+- JetBrains: Download from [Releases](https://github.com/githubgotest001/ai-tools-mng/releases) (use at your own risk regarding account policy).
