@@ -122,6 +122,21 @@ pub struct PlanUsage {
         skip_serializing_if = "Option::is_none"
     )]
     pub total_percent_used: Option<f64>,
+    /// Cursor Models 池本账期花费（美分），由 pool_spend 按 tier 汇总补上。
+    /// usage-summary 本身不含该字段，缺失表示没拉到，不是 0。
+    #[serde(
+        rename = "autoSpendCents",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub auto_spend_cents: Option<f64>,
+    /// Other Models 池本账期花费（美分），同上
+    #[serde(
+        rename = "apiSpendCents",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub api_spend_cents: Option<f64>,
 }
 
 /// Plan 用量明细（included 是横幅百分比的分子，缺失同样不能当 0）
@@ -170,6 +185,9 @@ pub struct ModelUsage {
     pub cache_write_tokens: String,
     pub cache_read_tokens: String,
     pub total_cents: f64,
+    /// 归属的用量池：2 = Cursor Models，1 = Other Models
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier: Option<i64>,
 }
 
 /// 过滤的使用事件数据
@@ -346,7 +364,35 @@ pub async fn get_usage_summary(
         }
     }
 
+    // usage-summary 只给分池百分比，金额得从聚合事件按 tier 拿。
+    // 没有百分比可配（团队/企业账号）就别白跑一趟请求。
+    attach_pool_spend_if_useful(&mut summary, session_token).await;
+
     Ok(summary)
+}
+
+/// 补上 Auto / API 两池的本账期花费（失败静默跳过，不影响百分比口径）
+async fn attach_pool_spend_if_useful(summary: &mut UsageSummary, session_token: &str) {
+    let has_percent = summary
+        .individual_usage
+        .as_ref()
+        .and_then(|usage| usage.plan.as_ref())
+        .is_some_and(super::pool_spend::plan_has_percent);
+    if !has_percent {
+        return;
+    }
+
+    let Some(start_ms) = summary
+        .billing_cycle_start
+        .as_deref()
+        .and_then(super::pool_spend::iso_to_millis)
+    else {
+        return;
+    };
+
+    if let Some(spend) = super::pool_spend::fetch_pool_spend(session_token, start_ms).await {
+        super::pool_spend::attach_pool_spend(summary, spend);
+    }
 }
 
 /// Stripe Profile 响应结构（api2.cursor.sh/auth/full_stripe_profile）
@@ -464,6 +510,7 @@ pub async fn get_aggregated_usage_data(
                                 .get("totalCents")
                                 .and_then(|v| v.as_f64())
                                 .unwrap_or(0.0),
+                            tier: agg.get("tier").and_then(|v| v.as_i64()),
                         };
                         aggregations.push(model_usage);
                     }

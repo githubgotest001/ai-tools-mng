@@ -13,9 +13,11 @@ import {
   isCursorSessionExpiredError,
   isCursorSessionInvalid,
   markCursorSessionInvalid,
+  planPoolSpend,
   planRemainingPercentFromCents,
   planSpendLabel,
-  remainingPercentFromUsed
+  remainingPercentFromUsed,
+  spendLabel
 } from './cursorUsage.js'
 
 // 官方 usage-summary 真实响应片段：横幅“已用 64%”= includedSpend 1288 / limit 2000，
@@ -102,6 +104,69 @@ test('池上限中途上调时，横幅口径不受影响', () => {
     planRemainingPercentFromCents(before)
   )
   assert.equal(remainingPercentFromUsed(afterLimitBump.autoPercentUsed), 98)
+})
+
+// 真实 Pro 账号快照：Auto 花 $46.80 / 池 $450，API 花 $166.78 / 池 $45（已打满），
+// 两池合计 $213.58 / $495。autoPercentUsed 与 totalPercentUsed 都是精确除法的结果，
+// 所以反推能落回整元数。
+const livePoolPlan = {
+  enabled: true,
+  used: 2000,
+  limit: 2000,
+  remaining: 0,
+  breakdown: { included: 2000, bonus: 19357, total: 21357.672855 },
+  autoPercentUsed: 10.400056144444444,
+  apiPercentUsed: 100,
+  totalPercentUsed: 43.146814858585856,
+  autoSpendCents: 4680.025265,
+  apiSpendCents: 16677.64759
+}
+
+test('分池金额按百分比反推池总额，落回整元', () => {
+  const pools = planPoolSpend(livePoolPlan)
+  assert.equal(pools.auto.limit, 45000)
+  assert.equal(pools.total.limit, 49500)
+  // API 池已打满 100%，反推只有下界，用 Total 减 Auto 补齐
+  assert.equal(pools.api.limit, 4500)
+  assert.equal(spendLabel(pools.auto), '$46.80 / $450.00')
+  assert.equal(spendLabel(pools.api), '$166.78 / $45.00')
+  assert.equal(spendLabel(pools.total), '$213.58 / $495.00')
+})
+
+test('两池金额之和与官方 breakdown.total 一致', () => {
+  const { autoSpendCents, apiSpendCents, breakdown } = livePoolPlan
+  assert.ok(Math.abs(autoSpendCents + apiSpendCents - breakdown.total) < 1e-6)
+  // breakdown.total 缺失时退回两池相加，Total 口径不该跟着消失
+  const withoutBreakdown = { ...livePoolPlan, breakdown: undefined }
+  assert.equal(planPoolSpend(withoutBreakdown).total.limit, 49500)
+})
+
+test('百分比过低或打满时不硬凑池总额', () => {
+  // 0.2% 已用时反推会把取整误差放大百倍，只显示已用金额
+  const barelyUsed = { autoSpendCents: 90, autoPercentUsed: 0.2 }
+  assert.equal(planPoolSpend(barelyUsed).auto.limit, null)
+  assert.equal(spendLabel(planPoolSpend(barelyUsed).auto), '$0.90')
+
+  // 两池都打满且没有 Total 可减，就都拿不到总额
+  const bothCapped = {
+    autoSpendCents: 50000,
+    apiSpendCents: 20000,
+    autoPercentUsed: 100,
+    apiPercentUsed: 100
+  }
+  const capped = planPoolSpend(bothCapped)
+  assert.equal(capped.auto.limit, null)
+  assert.equal(capped.api.limit, null)
+})
+
+test('拿不到分池花费时不渲染出 $0.00', () => {
+  assert.equal(planPoolSpend(null), null)
+  assert.equal(planPoolSpend(officialPlan), null)
+  assert.equal(spendLabel(null), '')
+  // 只拿到一个池的花费时，另一个池保持缺失而不是 0
+  const onlyAuto = planPoolSpend({ autoSpendCents: 4680, autoPercentUsed: 10.4 })
+  assert.equal(onlyAuto.api, null)
+  assert.equal(onlyAuto.total, null)
 })
 
 test('Grok Bot 周额度按剩余比例换算', () => {

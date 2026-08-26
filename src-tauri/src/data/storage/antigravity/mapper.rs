@@ -1,4 +1,6 @@
-use crate::data::storage::common::{AccountDbMapper, StorageError};
+use crate::data::storage::common::{
+    AccountDbMapper, StorageError, tags_from_json, tags_or_legacy, tags_to_json,
+};
 use crate::platforms::antigravity::models::{Account, QuotaData, TokenData};
 use tokio_postgres::Row;
 
@@ -18,6 +20,15 @@ impl AccountDbMapper<Account> for AntigravityAccountMapper {
             Some(value) => serde_json::from_value::<QuotaData>(value).ok(),
             None => None,
         };
+
+        // tags 列为空时回退到旧的 tag / tag_color，存量账号的标签才不会消失
+        let tag: Option<String> = row.get(15);
+        let tag_color: Option<String> = row.get(16);
+        let tags = tags_or_legacy(
+            tags_from_json(row.get(24)),
+            tag.as_deref(),
+            tag_color.as_deref(),
+        );
 
         let email: String = row.get(1);
         Ok(Account {
@@ -39,8 +50,9 @@ impl AccountDbMapper<Account> for AntigravityAccountMapper {
             },
             device_profile,
             quota,
-            tag: row.get(15),
-            tag_color: row.get(16),
+            tag,
+            tag_color,
+            tags,
             disabled: row.get(17),
             disabled_reason: row.get(18),
             disabled_at: row.get(19),
@@ -55,7 +67,8 @@ impl AccountDbMapper<Account> for AntigravityAccountMapper {
     fn select_columns() -> &'static str {
         "id, email, name, access_token, refresh_token, expires_in, expiry_timestamp, token_type, \
          project_id, oauth_client_key, session_id, is_gcp_tos, id_token, device_profile, quota, \
-         tag, tag_color, disabled, disabled_reason, disabled_at, created_at, last_used, updated_at, version"
+         tag, tag_color, disabled, disabled_reason, disabled_at, created_at, last_used, updated_at, version, \
+         tags"
     }
 
     fn insert_sql() -> &'static str {
@@ -63,8 +76,9 @@ impl AccountDbMapper<Account> for AntigravityAccountMapper {
         INSERT INTO antigravity_accounts 
             (id, email, name, access_token, refresh_token, expires_in, expiry_timestamp, token_type,
              project_id, oauth_client_key, session_id, is_gcp_tos, id_token, device_profile, quota,
-             tag, tag_color, disabled, disabled_reason, disabled_at, created_at, last_used, updated_at, version, deleted)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+             tag, tag_color, disabled, disabled_reason, disabled_at, created_at, last_used, updated_at, version, deleted,
+             tags)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
         ON CONFLICT (id) DO UPDATE SET
             email = EXCLUDED.email,
             name = EXCLUDED.name,
@@ -88,7 +102,8 @@ impl AccountDbMapper<Account> for AntigravityAccountMapper {
             last_used = EXCLUDED.last_used,
             updated_at = EXCLUDED.updated_at,
             version = EXCLUDED.version,
-            deleted = EXCLUDED.deleted
+            deleted = EXCLUDED.deleted,
+            tags = EXCLUDED.tags
         "#
     }
 
@@ -131,6 +146,7 @@ impl AccountDbMapper<Account> for AntigravityAccountMapper {
             Box::new(account.updated_at),
             Box::new(version),
             Box::new(account.deleted),
+            Box::new(tags_to_json(&account.tags)),
         ]
     }
 }

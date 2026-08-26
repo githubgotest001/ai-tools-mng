@@ -82,6 +82,14 @@ pub async fn add_new_fields_if_not_exist(
         &[],
     ).await?;
 
+    // 添加 tags 字段（如果不存在）- 多标签列表，旧的 tag / tag_color 保留为首项镜像
+    client
+        .execute(
+            "ALTER TABLE claude_accounts ADD COLUMN IF NOT EXISTS tags JSONB",
+            &[],
+        )
+        .await?;
+
     Ok(())
 }
 

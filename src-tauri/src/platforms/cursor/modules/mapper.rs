@@ -1,4 +1,6 @@
-use crate::data::storage::common::{AccountDbMapper, StorageError};
+use crate::data::storage::common::{
+    AccountDbMapper, StorageError, tags_from_json, tags_or_legacy, tags_to_json,
+};
 use crate::platforms::cursor::models::{Account, MachineInfo, TokenData};
 use tokio_postgres::Row;
 
@@ -17,6 +19,15 @@ impl AccountDbMapper<Account> for CursorAccountMapper {
             row.get::<_, Option<serde_json::Value>>(20)
                 .and_then(|v| serde_json::from_value(v).ok());
 
+        // tags 列为空时回退到旧的 tag / tag_color，存量账号的标签才不会消失
+        let tag: Option<String> = row.get(9);
+        let tag_color: Option<String> = row.get(10);
+        let tags = tags_or_legacy(
+            tags_from_json(row.get(22)),
+            tag.as_deref(),
+            tag_color.as_deref(),
+        );
+
         Ok(Account {
             id: row.get(0),
             email: row.get(1),
@@ -29,8 +40,9 @@ impl AccountDbMapper<Account> for CursorAccountMapper {
                 workos_cursor_session_token: row.get(7),
                 session_expiry_timestamp: row.get(8),
             },
-            tag: row.get(9),
-            tag_color: row.get(10),
+            tag,
+            tag_color,
+            tags,
             machine_info,
             membership_type: row.get(19),
             individual_usage,
@@ -51,7 +63,7 @@ impl AccountDbMapper<Account> for CursorAccountMapper {
          workos_cursor_session_token, session_expiry_timestamp, \
          tag, tag_color, disabled, disabled_reason, disabled_at, \
          created_at, last_used, updated_at, version, machine_info, \
-         membership_type, individual_usage, session_invalid_at"
+         membership_type, individual_usage, session_invalid_at, tags"
     }
 
     fn insert_sql() -> &'static str {
@@ -61,8 +73,8 @@ impl AccountDbMapper<Account> for CursorAccountMapper {
              workos_cursor_session_token, session_expiry_timestamp,
              tag, tag_color, disabled, disabled_reason, disabled_at, created_at,
              last_used, updated_at, version, deleted, machine_info,
-             membership_type, individual_usage, session_invalid_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+             membership_type, individual_usage, session_invalid_at, tags)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
         ON CONFLICT (id) DO UPDATE SET
             email = EXCLUDED.email,
             name = EXCLUDED.name,
@@ -84,7 +96,8 @@ impl AccountDbMapper<Account> for CursorAccountMapper {
             machine_info = EXCLUDED.machine_info,
             membership_type = EXCLUDED.membership_type,
             individual_usage = EXCLUDED.individual_usage,
-            session_invalid_at = EXCLUDED.session_invalid_at
+            session_invalid_at = EXCLUDED.session_invalid_at,
+            tags = EXCLUDED.tags
         "#
     }
 
@@ -128,6 +141,7 @@ impl AccountDbMapper<Account> for CursorAccountMapper {
             Box::new(account.membership_type.clone()),
             Box::new(individual_usage_json),
             Box::new(account.session_invalid_at),
+            Box::new(tags_to_json(&account.tags)),
         ]
     }
 }

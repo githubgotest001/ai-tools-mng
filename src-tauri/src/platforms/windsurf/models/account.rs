@@ -1,5 +1,5 @@
 use super::TokenData;
-use crate::data::storage::common::SyncableAccount;
+use crate::data::storage::common::{AccountTag, SyncableAccount};
 use serde::{Deserialize, Serialize};
 
 /// 配额数据结构
@@ -55,12 +55,15 @@ pub struct Account {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quota: Option<QuotaData>,
 
-    /// 用户标签
+    /// 用户标签（`tags` 首项的镜像，供旧版本客户端读取）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
-    /// 标签颜色
+    /// 标签颜色（同上）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag_color: Option<String>,
+    /// 用户标签列表，最多 MAX_ACCOUNT_TAGS 个
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<AccountTag>,
 
     #[serde(default)]
     pub disabled: bool,
@@ -132,6 +135,7 @@ impl Account {
             quota: None,
             tag: None,
             tag_color: None,
+            tags: Vec::new(),
             disabled: false,
             disabled_reason: None,
             disabled_at: None,

@@ -21,27 +21,12 @@
 
     <!-- 标签 -->
     <td class="overflow-hidden px-2.5 py-3.5 border-b border-border/50 align-middle whitespace-nowrap text-[13px] text-text">
-      <!-- 添加标签按钮（无标签时显示） -->
-      <span
-        v-if="!hasTag"
-        class="btn btn--icon-sm btn--dashed"
-        v-tooltip="$t('tokenList.clickToAddTag')"
-        @click.stop="openTagEditor"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-        </svg>
-      </span>
-      <!-- 标签（有标签时显示，可点击编辑） -->
-      <span
-        v-else
-        class="badge editable max-w-[75px]"
-        :style="tagBadgeStyle"
-        v-tooltip="$t('tokenList.clickToEditTag')"
-        @click.stop="openTagEditor"
-      >
-        {{ tagDisplayName }}
-      </span>
+      <TagBadges
+        :account="account"
+        :max="1"
+        badge-class="max-w-[75px]"
+        @edit="openTagEditor"
+      />
     </td>
 
     <!-- 邮箱 -->
@@ -249,6 +234,7 @@
     v-model:visible="showTagEditor"
     :token="accountAsToken"
     :all-tokens="allAccountsAsTokens"
+    :max-tags="MAX_ACCOUNT_TAGS"
     @save="handleTagSave"
     @clear="handleTagClear"
   />
@@ -258,13 +244,14 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FloatingDropdown from '../common/FloatingDropdown.vue'
+import TagBadges from '../common/TagBadges.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
+import { useAccountTags } from '../../composables/useAccountTags'
+import { MAX_ACCOUNT_TAGS } from '../../utils/accountTags'
 import { getReverseProxyAction, toggleReverseProxyForAccount } from '@/utils/openaiReverseProxy'
 import { getAvailableOpenAIThirdPartyCredentialTemplates } from '@/utils/openaiThirdPartyCredentials'
 
 const { t: $t } = useI18n()
-
-const DEFAULT_TAG_COLOR = '#6366f1'
 
 const props = defineProps({
   account: {
@@ -322,8 +309,6 @@ const switchTooltip = computed(() => (
 
 // 复制菜单状态
 const copyMenuRef = ref(null)
-// 标签编辑器状态
-const showTagEditor = ref(false)
 
 const maskedEmail = computed(() => {
   const email = props.account.email
@@ -331,66 +316,15 @@ const maskedEmail = computed(() => {
   return 'hello@openai.com'
 })
 
-// 标签相关计算属性
-const tagDisplayName = computed(() => (props.account.tag ?? '').trim())
-const hasTag = computed(() => tagDisplayName.value.length > 0)
-
-const normalizeHexColor = (color) => {
-  if (typeof color !== 'string') {
-    return DEFAULT_TAG_COLOR
-  }
-  const trimmed = color.trim()
-  if (/^#[0-9A-Fa-f]{6}$/.test(trimmed)) {
-    return trimmed
-  }
-  return DEFAULT_TAG_COLOR
-}
-
-const tagBadgeStyle = computed(() => {
-  if (!hasTag.value) {
-    return {}
-  }
-  const color = normalizeHexColor(props.account.tag_color || DEFAULT_TAG_COLOR)
-  return {
-    '--tag-color': color
-  }
-})
-
-// 将 account 转换为 TagEditorModal 需要的 token 格式
-const accountAsToken = computed(() => ({
-  tag_name: props.account.tag || '',
-  tag_color: props.account.tag_color || ''
-}))
-
-const allAccountsAsTokens = computed(() =>
-  props.allAccounts.map(acc => ({
-    tag_name: acc.tag || '',
-    tag_color: acc.tag_color || ''
-  }))
-)
-
-// 打开标签编辑器
-const openTagEditor = () => {
-  showTagEditor.value = true
-}
-
-// 标签保存处理
-const handleTagSave = ({ tagName, tagColor }) => {
-  props.account.tag = tagName
-  props.account.tag_color = tagColor
-  props.account.updated_at = Math.floor(Date.now() / 1000)
-  emit('account-updated', props.account)
-  window.$notify?.success($t('messages.tagUpdated'))
-}
-
-// 标签清除处理
-const handleTagClear = () => {
-  props.account.tag = ''
-  props.account.tag_color = ''
-  props.account.updated_at = Math.floor(Date.now() / 1000)
-  emit('account-updated', props.account)
-  window.$notify?.success($t('messages.tagCleared'))
-}
+// 标签相关
+const {
+  showTagEditor,
+  accountAsToken,
+  allAccountsAsTokens,
+  openTagEditor,
+  handleTagSave,
+  handleTagClear
+} = useAccountTags(props, emit)
 
 const reverseProxyAction = computed(() => getReverseProxyAction(props.account))
 

@@ -118,11 +118,87 @@ export function planRemainingPercentFromCents(plan) {
   return clampPercent(100 - (spend.spent / spend.limit) * 100)
 }
 
+/** 美分转 `$12.88` */
+export function formatCentsAsDollars(cents) {
+  const value = toFiniteNumber(cents)
+  return value === null ? '' : `$${(value / 100).toFixed(2)}`
+}
+
+/** `$12.88 / $20.00`；总额未知时退成 `$12.88` */
+export function spendLabel(spend) {
+  if (!spend) return ''
+  const spent = formatCentsAsDollars(spend.spent)
+  if (!spent) return ''
+  const limit = formatCentsAsDollars(spend.limit)
+  return limit ? `${spent} / ${limit}` : spent
+}
+
 /** 套餐额度的金额说明，如 `$12.88 / $20.00` */
 export function planSpendLabel(plan) {
-  const spend = planIncludedSpend(plan)
-  if (!spend) return ''
-  return `$${(spend.spent / 100).toFixed(2)} / $${(spend.limit / 100).toFixed(2)}`
+  return spendLabel(planIncludedSpend(plan))
+}
+
+/**
+ * 百分比低于此值就不反推池预算：分母越小，除法把 Cursor 的取整误差放得越大。
+ * 实测 10% 已用时反推误差约 0.001%，1% 时仍在可接受范围。
+ */
+const MIN_PERCENT_FOR_LIMIT_ESTIMATE = 1
+
+/**
+ * 由「已用金额 + 已用百分比」反推池预算（美分）。
+ *
+ * Cursor 不公开各池预算，但 percentUsed = spend / budget 是精确的，
+ * 于是 budget = spend / percent。实测两个池分别落在 $450 / $45 这样的整元
+ * 数上，所以结果按整元取整，抹掉浮点噪音（45000.24 → 45000）。
+ *
+ * percentUsed 达到 100 时是被官方截断的（超额仍显示 100），此时反推只会
+ * 得到一个下界，必须返回 null 让调用方走别的路子。
+ */
+function estimateLimitCents(spentCents, percentUsed) {
+  const spent = toFiniteNumber(spentCents)
+  const percent = toFiniteNumber(percentUsed)
+  if (spent === null || percent === null) return null
+  if (percent < MIN_PERCENT_FOR_LIMIT_ESTIMATE || percent >= 100) return null
+  return Math.round(spent / percent) * 100
+}
+
+/**
+ * Auto / API / Total 三个用量池的「已用金额 + 池总额」（美分）。
+ *
+ * 已用金额来自 pool_spend 按 tier 汇总的聚合事件（autoSpendCents /
+ * apiSpendCents），池总额靠百分比反推。某个池已经打满 100% 时反推不出总额，
+ * 就用 Total 减掉另一个池补上——两池金额之和恰好等于 breakdown.total，
+ * 两池预算之和也恰好等于 Total 池预算，实测都严丝合缝。
+ *
+ * 拿不到金额（缺 autoSpendCents，或团队账号没有 plan）时返回 null，
+ * 界面据此只显示百分比，不能凭空造出 $0.00。
+ */
+export function planPoolSpend(plan) {
+  const autoSpent = toFiniteNumber(plan?.autoSpendCents ?? plan?.auto_spend_cents)
+  const apiSpent = toFiniteNumber(plan?.apiSpendCents ?? plan?.api_spend_cents)
+  if (autoSpent === null && apiSpent === null) return null
+
+  const totalSpent =
+    toFiniteNumber(plan?.breakdown?.total) ??
+    (autoSpent !== null && apiSpent !== null ? autoSpent + apiSpent : null)
+
+  const totalLimit = estimateLimitCents(totalSpent, plan?.totalPercentUsed)
+  let autoLimit = estimateLimitCents(autoSpent, plan?.autoPercentUsed)
+  let apiLimit = estimateLimitCents(apiSpent, plan?.apiPercentUsed)
+
+  if (totalLimit !== null) {
+    if (autoLimit === null && apiLimit !== null) autoLimit = totalLimit - apiLimit
+    else if (apiLimit === null && autoLimit !== null) apiLimit = totalLimit - autoLimit
+  }
+
+  const pool = (spent, limit) =>
+    spent === null ? null : { spent, limit: limit === null || limit <= 0 ? null : limit }
+
+  return {
+    auto: pool(autoSpent, autoLimit),
+    api: pool(apiSpent, apiLimit),
+    total: pool(totalSpent, totalLimit)
+  }
 }
 
 export function grokBotRemainingPercent(grokBot) {

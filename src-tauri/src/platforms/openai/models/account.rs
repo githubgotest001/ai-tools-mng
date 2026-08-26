@@ -1,5 +1,5 @@
 use super::{QuotaData, QuotaRefreshState, TokenData};
-use crate::data::storage::common::SyncableAccount;
+use crate::data::storage::common::{AccountTag, SyncableAccount};
 use serde::{Deserialize, Serialize};
 
 fn default_reverse_proxy_enabled() -> bool {
@@ -73,12 +73,15 @@ pub struct Account {
     /// 配额检查调度状态
     #[serde(default)]
     pub quota_refresh: QuotaRefreshState,
-    /// 标签
+    /// 标签（`tags` 首项的镜像，供旧版本客户端读取）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
-    /// 标签颜色
+    /// 标签颜色（同上）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag_color: Option<String>,
+    /// 用户标签列表，最多 MAX_ACCOUNT_TAGS 个
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<AccountTag>,
     pub created_at: i64,
     pub last_used: i64,
     pub updated_at: i64,
@@ -175,6 +178,7 @@ impl Account {
             quota_refresh: QuotaRefreshState::default(),
             tag: None,
             tag_color: None,
+            tags: Vec::new(),
             created_at: now,
             last_used: now,
             updated_at: now,
@@ -204,6 +208,7 @@ impl Account {
             quota_refresh: QuotaRefreshState::default(),
             tag: None,
             tag_color: None,
+            tags: Vec::new(),
             created_at: now,
             last_used: now,
             updated_at: now,

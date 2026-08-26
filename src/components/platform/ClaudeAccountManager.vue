@@ -115,7 +115,7 @@
                 <th class="th w-[120px]">{{ $t('platform.claude.table.serviceName') }}</th>
                 <th class="th">{{ $t('platform.claude.table.websiteUrl') }}</th>
                 <th class="th w-[100px]">{{ $t('platform.claude.table.expiryDate') }}</th>
-                <th class="th w-[60px]">{{ $t('subscriptions.fields.tag') }}</th>
+                <th class="th w-24">{{ $t('subscriptions.fields.tag') }}</th>
                 <th class="th w-[80px] text-center">{{ $t('common.actions') }}</th>
               </tr>
             </thead>
@@ -396,6 +396,7 @@
       v-model:visible="showBatchTagEditor"
       :tokens="selectedAccounts"
       :all-tokens="allAccountsAsTokens"
+      :max-tags="MAX_ACCOUNT_TAGS"
       @save="handleBatchTagSave"
       @clear="handleBatchTagClear"
     />
@@ -417,6 +418,17 @@ import TagEditorModal from '../token/TagEditorModal.vue'
 import AccountCard from '../claude/AccountCard.vue'
 import AccountTableRow from '../claude/AccountTableRow.vue'
 import AccountDialog from '../claude/AccountDialog.vue'
+import {
+  MAX_ACCOUNT_TAGS,
+  accountHasAnyTag,
+  accountTagNames,
+  accountTags,
+  accountsAsTagTokens,
+  collectAccountTags,
+  countAccountsByTag,
+  countAccountsWithoutTag,
+  setAccountTags
+} from '../../utils/accountTags'
 
 const { t: $t } = useI18n()
 
@@ -525,7 +537,7 @@ const searchFilteredAccounts = computed(() => {
     result = result.filter(acc =>
       acc.service_name?.toLowerCase().includes(query) ||
       acc.website_url?.toLowerCase().includes(query) ||
-      acc.tag?.toLowerCase().includes(query)
+      accountTagNames(acc).some(name => name.toLowerCase().includes(query))
     )
   }
   return result
@@ -536,18 +548,16 @@ const tagFilteredAccounts = computed(() => {
   let result = searchFilteredAccounts.value
   if (selectedTags.value.size > 0) {
     const hasNoTagFilter = selectedTags.value.has('__no_tag__')
-    const selectedTagNames = new Set(
-      Array.from(selectedTags.value).filter(t => t !== '__no_tag__')
+    const lowerSelectedTags = new Set(
+      Array.from(selectedTags.value)
+        .filter(t => t !== '__no_tag__')
+        .map(tag => tag.toLowerCase())
     )
     result = result.filter(acc => {
-      const tag = acc.tag || ''
-      const isNoTag = !tag
-      let matches = false
-      if (isNoTag) {
-        matches = hasNoTagFilter
-      } else {
-        matches = selectedTagNames.has(tag)
-      }
+      // 多标签下选中某个标签意味着「含有该标签」，命中任一即算匹配
+      const matches = accountTags(acc).length === 0
+        ? hasNoTagFilter
+        : accountHasAnyTag(acc, lowerSelectedTags)
       return tagFilterMode.value === 'include' ? matches : !matches
     })
   }
@@ -582,17 +592,9 @@ const expiryStatistics = computed(() => {
 
 // 标签统计
 const tagStatistics = computed(() => {
-  const accs = accounts.value
-  const stats = {}
-  let taggedCount = 0
-  accs.forEach(acc => {
-    if (acc.tag) {
-      stats[acc.tag] = (stats[acc.tag] || 0) + 1
-      taggedCount++
-    }
-  })
-  stats.all = accs.length
-  stats.__no_tag__ = accs.length - taggedCount
+  const stats = countAccountsByTag(accounts.value)
+  stats.all = accounts.value.length
+  stats.__no_tag__ = countAccountsWithoutTag(accounts.value)
   return stats
 })
 
@@ -604,18 +606,16 @@ const filteredAccounts = computed(() => {
   // 过滤：标签
   if (selectedTags.value.size > 0) {
     const hasNoTagFilter = selectedTags.value.has('__no_tag__')
-    const selectedTagNames = new Set(
-      Array.from(selectedTags.value).filter(t => t !== '__no_tag__')
+    const lowerSelectedTags = new Set(
+      Array.from(selectedTags.value)
+        .filter(t => t !== '__no_tag__')
+        .map(tag => tag.toLowerCase())
     )
     result = result.filter(acc => {
-      const tag = acc.tag || ''
-      const isNoTag = !tag
-      let matches = false
-      if (isNoTag) {
-        matches = hasNoTagFilter
-      } else {
-        matches = selectedTagNames.has(tag)
-      }
+      // 多标签下选中某个标签意味着「含有该标签」，命中任一即算匹配
+      const matches = accountTags(acc).length === 0
+        ? hasNoTagFilter
+        : accountHasAnyTag(acc, lowerSelectedTags)
       return tagFilterMode.value === 'include' ? matches : !matches
     })
   }
@@ -648,15 +648,7 @@ const filteredAccounts = computed(() => {
   return result
 })
 
-const tagOptions = computed(() => {
-  const tagMap = new Map()
-  accounts.value.forEach((acc) => {
-    if (acc.tag && !tagMap.has(acc.tag)) {
-      tagMap.set(acc.tag, { name: acc.tag })
-    }
-  })
-  return Array.from(tagMap.values()).sort((a, b) => a.name.localeCompare(b.name))
-})
+const tagOptions = computed(() => collectAccountTags(accounts.value))
 
 // 分页后的账户列表
 const paginatedAccounts = computed(() => {
@@ -694,18 +686,12 @@ const selectedAccounts = computed(() => {
   return accounts.value
     .filter(a => selectedAccountIds.value.has(a.id))
     .map(acc => ({
-      id: acc.id,
-      tag_name: acc.tag || '',
-      tag_color: acc.tag_color || ''
+      tags: accountTags(acc),
+      _account: acc // 保存原始账号引用
     }))
 })
 
-const allAccountsAsTokens = computed(() =>
-  accounts.value.map(acc => ({
-    tag_name: acc.tag || '',
-    tag_color: acc.tag_color || ''
-  }))
-)
+const allAccountsAsTokens = computed(() => accountsAsTagTokens(accounts.value))
 
 const isAllSelected = computed(() => {
   return paginatedAccounts.value.length > 0 && paginatedAccounts.value.every(a => selectedAccountIds.value.has(a.id))
@@ -972,7 +958,7 @@ const showBatchDeleteConfirm = async () => {
   }
 }
 
-const handleBatchTagSave = async ({ tagName, tagColor }) => {
+const handleBatchTagSave = async ({ tags }) => {
   if (selectedAccountIds.value.size === 0) return
 
   const selectedIds = Array.from(selectedAccountIds.value)
@@ -981,9 +967,7 @@ const handleBatchTagSave = async ({ tagName, tagColor }) => {
   for (const accountId of selectedIds) {
     const account = accounts.value.find(a => a.id === accountId)
     if (account) {
-      account.tag = tagName
-      account.tag_color = tagColor
-      account.updated_at = Math.floor(Date.now() / 1000)
+      setAccountTags(account, tags)
       updatedCount++
       markItemUpsert(account)
     }
@@ -1013,9 +997,7 @@ const handleBatchTagClear = async () => {
   for (const accountId of selectedIds) {
     const account = accounts.value.find(a => a.id === accountId)
     if (account) {
-      account.tag = ''
-      account.tag_color = ''
-      account.updated_at = Math.floor(Date.now() / 1000)
+      setAccountTags(account, [])
       clearedCount++
       markItemUpsert(account)
     }

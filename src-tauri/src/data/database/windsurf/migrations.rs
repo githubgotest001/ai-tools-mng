@@ -84,6 +84,8 @@ pub async fn add_new_fields_if_not_exist(
         ("devin_auth1_token", "TEXT"),
         ("devin_account_id", "TEXT"),
         ("devin_primary_org_id", "TEXT"),
+        // 多标签列表；旧的 tag / tag_color 保留为首项镜像
+        ("tags", "JSONB"),
     ];
 
     for (field, ty) in fields {

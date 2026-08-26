@@ -21,27 +21,12 @@
 
     <!-- 标签 -->
     <td class="w-[60px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[13px] text-text">
-      <!-- 添加标签按钮（无标签时显示） -->
-      <span
-        v-if="!hasTag"
-        class="btn btn--icon-sm btn--dashed"
-        v-tooltip="$t('tokenList.clickToAddTag')"
-        @click.stop="openTagEditor"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-        </svg>
-      </span>
-      <!-- 标签（有标签时显示，可点击编辑） -->
-      <span
-        v-else
-        class="badge editable badge--sm max-w-[50px]"
-        :style="tagBadgeStyle"
-        v-tooltip="$t('tokenList.clickToEditTag')"
-        @click.stop="openTagEditor"
-      >
-        {{ tagDisplayName }}
-      </span>
+      <TagBadges
+        :account="account"
+        :max="1"
+        badge-class="max-w-[50px]"
+        @edit="openTagEditor"
+      />
     </td>
 
     <!-- 邮箱 -->
@@ -183,6 +168,7 @@
     v-model:visible="showTagEditor"
     :token="accountAsToken"
     :all-tokens="allAccountsAsTokens"
+    :max-tags="MAX_ACCOUNT_TAGS"
     @save="handleTagSave"
     @clear="handleTagClear"
   />
@@ -192,11 +178,12 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FloatingDropdown from '../common/FloatingDropdown.vue'
+import TagBadges from '../common/TagBadges.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
+import { useAccountTags } from '../../composables/useAccountTags'
+import { MAX_ACCOUNT_TAGS } from '../../utils/accountTags'
 
 const { t: $t } = useI18n()
-
-const DEFAULT_TAG_COLOR = '#f97316'
 
 const props = defineProps({
   account: {
@@ -236,7 +223,6 @@ const props = defineProps({
 const emit = defineEmits(['switch', 'refresh', 'delete', 'select', 'view-models', 'account-updated'])
 
 const menuRef = ref(null)
-const showTagEditor = ref(false)
 
 const maskedEmail = computed(() => {
   const email = props.account.email
@@ -355,45 +341,14 @@ const getTierBadgeClass = (tierClass) => {
 }
 
 // 标签相关
-const tagDisplayName = computed(() => (props.account.tag ?? '').trim())
-const hasTag = computed(() => tagDisplayName.value.length > 0)
-
-const tagBadgeStyle = computed(() => {
-  if (!hasTag.value) return {}
-  return { '--tag-color': props.account.tag_color || DEFAULT_TAG_COLOR }
-})
-
-const accountAsToken = computed(() => ({
-  tag_name: props.account.tag || '',
-  tag_color: props.account.tag_color || ''
-}))
-
-const allAccountsAsTokens = computed(() =>
-  props.allAccounts.map(acc => ({
-    tag_name: acc.tag || '',
-    tag_color: acc.tag_color || ''
-  }))
-)
-
-const openTagEditor = () => {
-  showTagEditor.value = true
-}
-
-const handleTagSave = ({ tagName, tagColor }) => {
-  props.account.tag = tagName
-  props.account.tag_color = tagColor
-  props.account.updated_at = Math.floor(Date.now() / 1000)
-  emit('account-updated', props.account)
-  window.$notify?.success($t('messages.tagUpdated'))
-}
-
-const handleTagClear = () => {
-  props.account.tag = ''
-  props.account.tag_color = ''
-  props.account.updated_at = Math.floor(Date.now() / 1000)
-  emit('account-updated', props.account)
-  window.$notify?.success($t('messages.tagCleared'))
-}
+const {
+  showTagEditor,
+  accountAsToken,
+  allAccountsAsTokens,
+  openTagEditor,
+  handleTagSave,
+  handleTagClear
+} = useAccountTags(props, emit)
 
 const copyEmail = async () => {
   try {

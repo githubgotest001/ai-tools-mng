@@ -1,4 +1,6 @@
-use crate::data::storage::common::{AccountDbMapper, StorageError};
+use crate::data::storage::common::{
+    AccountDbMapper, StorageError, tags_from_json, tags_or_legacy, tags_to_json,
+};
 use crate::platforms::claude::Account;
 use tokio_postgres::Row;
 
@@ -7,6 +9,15 @@ pub struct ClaudeAccountMapper;
 
 impl AccountDbMapper<Account> for ClaudeAccountMapper {
     fn from_row(row: &Row) -> Result<Account, StorageError> {
+        // tags 列为空时回退到旧的 tag / tag_color，存量账号的标签才不会消失
+        let tag: Option<String> = row.try_get(6).ok().flatten();
+        let tag_color: Option<String> = row.try_get(7).ok().flatten();
+        let tags = tags_or_legacy(
+            tags_from_json(row.try_get(19).ok().flatten()),
+            tag.as_deref(),
+            tag_color.as_deref(),
+        );
+
         Ok(Account {
             id: row.get(0),
             service_name: row.get(1),
@@ -14,8 +25,9 @@ impl AccountDbMapper<Account> for ClaudeAccountMapper {
             start_date: row.get(3),
             duration_days: row.get(4),
             expiry_date: row.get(5),
-            tag: row.try_get(6).ok().flatten(),
-            tag_color: row.try_get(7).ok().flatten(),
+            tag,
+            tag_color,
+            tags,
             notes: row.try_get(8).ok().flatten(),
             base_url: row.get(9),
             auth_token: row.get(10),
@@ -34,7 +46,7 @@ impl AccountDbMapper<Account> for ClaudeAccountMapper {
         "id, service_name, website_url, start_date, duration_days, expiry_date, \
          tag, tag_color, notes, base_url, auth_token, \
          default_opus_model, default_sonnet_model, default_haiku_model, use_model, \
-         created_at, updated_at, deleted, version"
+         created_at, updated_at, deleted, version, tags"
     }
 
     fn insert_sql() -> &'static str {
@@ -43,8 +55,8 @@ impl AccountDbMapper<Account> for ClaudeAccountMapper {
             (id, service_name, website_url, start_date, duration_days, expiry_date,
              tag, tag_color, notes, base_url, auth_token,
              default_opus_model, default_sonnet_model, default_haiku_model, use_model,
-             created_at, updated_at, deleted, version)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+             created_at, updated_at, deleted, version, tags)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
         ON CONFLICT (id) DO UPDATE SET
             service_name = EXCLUDED.service_name,
             website_url = EXCLUDED.website_url,
@@ -62,7 +74,8 @@ impl AccountDbMapper<Account> for ClaudeAccountMapper {
             use_model = EXCLUDED.use_model,
             updated_at = EXCLUDED.updated_at,
             deleted = EXCLUDED.deleted,
-            version = EXCLUDED.version
+            version = EXCLUDED.version,
+            tags = EXCLUDED.tags
         "#
     }
 
@@ -90,6 +103,7 @@ impl AccountDbMapper<Account> for ClaudeAccountMapper {
             Box::new(account.updated_at),
             Box::new(account.deleted),
             Box::new(version),
+            Box::new(tags_to_json(&account.tags)),
         ]
     }
 }
