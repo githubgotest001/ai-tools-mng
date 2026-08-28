@@ -12,9 +12,13 @@
 //!
 //! 单条会话的字段名没有拿到真实账号实测过，所以不写死结构体：只按候选名抽出要用的几项，
 //! 其余整个对象原样透传给前端展示，Cursor 改字段也不会把列表打空。
+//!
+//! 注意：没有「当前设备」识别。接口不返回 is_current 一类的字段，而本工具保存的
+//! session token（JWT）里的 workosSessionId 与该列表的会话 id 实测对不上（识别率≈0），
+//! 与其给一个永远不亮、还会误导用户「没标记就能放心踢」的徽章，不如由前端统一提示
+//! 踢出任意网页类型设备都需谨慎。
 
 use crate::http_client::create_proxy_client;
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -50,7 +54,6 @@ pub struct CursorSession {
     pub last_active_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
-    pub is_current: bool,
     pub raw: Value,
 }
 
@@ -71,11 +74,6 @@ fn pick_str(map: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<Strin
         }
     }
     None
-}
-
-fn pick_bool(map: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<bool> {
-    keys.iter()
-        .find_map(|key| map.get(*key).and_then(Value::as_bool))
 }
 
 /// 地点可能是整串，也可能拆成 city / region / country
@@ -113,16 +111,11 @@ fn pick_device(map: &serde_json::Map<String, Value>) -> Option<String> {
 }
 
 /// 把服务端返回的一条会话规整成 `CursorSession`；拿不到 id 的条目直接丢弃（无法撤销）
-fn normalize_session(value: &Value, current_session_id: Option<&str>) -> Option<CursorSession> {
+fn normalize_session(value: &Value) -> Option<CursorSession> {
     let map = value.as_object()?;
 
     let id = pick_str(map, &["id", "session_id", "sessionId"])?;
     let session_type = pick_str(map, &["type", "session_type", "sessionType"]);
-
-    // 服务端没给 isCurrent 时，退回用本地 session token 里的会话 id 认领当前设备
-    let is_current = pick_bool(map, &["is_current", "isCurrent", "current"]).unwrap_or_else(|| {
-        current_session_id.is_some_and(|current| current == id)
-    });
 
     Some(CursorSession {
         id,
@@ -142,33 +135,8 @@ fn normalize_session(value: &Value, current_session_id: Option<&str>) -> Option<
             ],
         ),
         created_at: pick_str(map, &["created_at", "createdAt"]),
-        is_current,
         raw: value.clone(),
     })
-}
-
-/// 从 `WorkosCursorSessionToken` 的 JWT 里读会话 id。
-///
-/// Cursor 签的 token 把它放在 `workosSessionId`（实测 payload：`sub`、`time`、
-/// `randomness`、`exp`、`iss`、`scope`、`aud`、`type`、`workosSessionId`），
-/// 值形如 `session_01XXXX`，和 `/api/auth/sessions` 列表里的 id 同一套编号。
-/// `sid` 是 WorkOS 原生 token 的写法，留着兜底。
-/// 只用于标记「当前设备」，取不到就算了。
-fn session_id_from_token(session_token: &str) -> Option<String> {
-    let jwt = if session_token.contains("%3A%3A") {
-        session_token.split("%3A%3A").nth(1)?
-    } else if session_token.contains("::") {
-        session_token.split("::").nth(1)?
-    } else {
-        session_token
-    };
-
-    let payload = URL_SAFE_NO_PAD.decode(jwt.split('.').nth(1)?).ok()?;
-    let json: Value = serde_json::from_slice(&payload).ok()?;
-    ["workosSessionId", "workos_session_id", "sid", "session_id"]
-        .iter()
-        .find_map(|key| json.get(*key).and_then(Value::as_str))
-        .map(str::to_string)
 }
 
 /// 未登录时 cursor.com 会 307 跳到 WorkOS 登录页，跟着跳完拿到的是 HTML。
@@ -231,16 +199,10 @@ pub async fn list_sessions(session_token: &str) -> Result<CursorSessionList, Str
         return Err(message);
     }
 
-    let current_session_id = session_id_from_token(session_token);
     let sessions = json
         .get("sessions")
         .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| normalize_session(item, current_session_id.as_deref()))
-                .collect()
-        })
+        .map(|items| items.iter().filter_map(normalize_session).collect())
         .unwrap_or_default();
 
     Ok(CursorSessionList { sessions })
@@ -319,13 +281,12 @@ mod tests {
             "last_active_at": "2026-08-24T10:00:00Z"
         });
 
-        let session = normalize_session(&raw, None).expect("session parsed");
+        let session = normalize_session(&raw).expect("session parsed");
         assert_eq!(session.id, "session_01ABC");
         assert_eq!(session.session_type.as_deref(), Some("SESSION_TYPE_CLIENT"));
         assert_eq!(session.ip_address.as_deref(), Some("203.0.113.7"));
         assert_eq!(session.location.as_deref(), Some("Tokyo, JP"));
         assert_eq!(session.device.as_deref(), Some("Cursor/1.2.3"));
-        assert!(!session.is_current);
     }
 
     #[test]
@@ -336,91 +297,27 @@ mod tests {
             "ipAddress": "198.51.100.4",
             "location": "Berlin, DE",
             "deviceName": "Chrome on macOS",
-            "lastActiveAt": "2026-08-25T06:00:00Z",
-            "isCurrent": true
+            "lastActiveAt": "2026-08-25T06:00:00Z"
         });
 
-        let session = normalize_session(&raw, None).expect("session parsed");
+        let session = normalize_session(&raw).expect("session parsed");
         assert_eq!(session.id, "session_01XYZ");
         assert_eq!(session.session_type.as_deref(), Some("SESSION_TYPE_WEB"));
         assert_eq!(session.device.as_deref(), Some("Chrome on macOS"));
-        assert!(session.is_current);
-    }
-
-    #[test]
-    fn falls_back_to_token_session_id_for_current_device() {
-        let raw = serde_json::json!({ "id": "session_01ABC", "type": "SESSION_TYPE_WEB" });
-
-        assert!(normalize_session(&raw, Some("session_01ABC")).unwrap().is_current);
-        assert!(!normalize_session(&raw, Some("session_01OTHER")).unwrap().is_current);
     }
 
     #[test]
     fn drops_entries_without_an_id() {
         // 没有 id 就没法撤销，留在列表里只会点了报错
         let raw = serde_json::json!({ "type": "SESSION_TYPE_WEB", "ip_address": "203.0.113.7" });
-        assert!(normalize_session(&raw, None).is_none());
+        assert!(normalize_session(&raw).is_none());
     }
 
     #[test]
     fn keeps_unknown_fields_in_raw() {
         let raw = serde_json::json!({ "id": "s1", "somethingNew": "keep me" });
-        let session = normalize_session(&raw, None).unwrap();
+        let session = normalize_session(&raw).unwrap();
         assert_eq!(session.raw["somethingNew"], "keep me");
-    }
-
-    /// 拼一个 `user_xxx::<jwt>` 形态的 session token，payload 为给定 JSON
-    fn session_token_with_payload(payload: &str, separator: &str) -> String {
-        format!(
-            "user_01{}eyJhbGciOiJIUzI1NiJ9.{}.sig",
-            separator,
-            URL_SAFE_NO_PAD.encode(payload.as_bytes())
-        )
-    }
-
-    #[test]
-    fn reads_workos_session_id_from_token() {
-        // Cursor 实际签发的 payload 形态：会话 id 在 workosSessionId，没有 sid
-        let token = session_token_with_payload(
-            r#"{"sub":"grok|user_01","type":"web","workosSessionId":"session_01ABC"}"#,
-            "%3A%3A",
-        );
-        assert_eq!(
-            session_id_from_token(&token).as_deref(),
-            Some("session_01ABC")
-        );
-    }
-
-    #[test]
-    fn reads_session_id_from_legacy_keys() {
-        for key in ["workos_session_id", "sid", "session_id"] {
-            let token =
-                session_token_with_payload(&format!(r#"{{"{key}":"session_01ABC"}}"#), "::");
-            assert_eq!(
-                session_id_from_token(&token).as_deref(),
-                Some("session_01ABC"),
-                "failed for key {key}"
-            );
-        }
-    }
-
-    #[test]
-    fn prefers_workos_session_id_over_sid() {
-        let token = session_token_with_payload(
-            r#"{"sid":"session_01LEGACY","workosSessionId":"session_01ABC"}"#,
-            "::",
-        );
-        assert_eq!(
-            session_id_from_token(&token).as_deref(),
-            Some("session_01ABC")
-        );
-    }
-
-    #[test]
-    fn returns_none_when_token_has_no_session_id() {
-        let token = session_token_with_payload(r#"{"sub":"grok|user_01"}"#, "::");
-        assert_eq!(session_id_from_token(&token), None);
-        assert_eq!(session_id_from_token("not-a-jwt"), None);
     }
 
     #[test]
@@ -435,7 +332,7 @@ mod tests {
             "created_at": "2026-08-01T06:00:00Z"
         });
         let list = CursorSessionList {
-            sessions: vec![normalize_session(&raw, None).unwrap()],
+            sessions: vec![normalize_session(&raw).unwrap()],
         };
 
         let json = serde_json::to_value(&list).unwrap();
@@ -448,7 +345,6 @@ mod tests {
             "device",
             "lastActiveAt",
             "createdAt",
-            "isCurrent",
             "raw",
         ] {
             assert!(session.get(key).is_some(), "missing key {key}");

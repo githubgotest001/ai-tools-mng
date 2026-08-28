@@ -2,6 +2,34 @@
   <div class="flex items-center justify-between gap-4 px-5 py-4 border-b border-border bg-surface shrink-0">
     <!-- 左侧：存储状态 + 功能性操作 -->
     <div class="flex items-center gap-3 shrink-0">
+      <!-- 当前平台标识，点击返回平台选择 -->
+      <template v-if="navPlatform">
+        <button
+          type="button"
+          class="btn btn--ghost h-8 gap-1.5 !px-2 !py-0"
+          @click.stop="handleBackToPlatforms"
+          v-tooltip="$t('platforms.backToSelector')"
+        >
+          <svg class="h-3.5 w-3.5 shrink-0 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          <img
+            v-if="isNavIconImage"
+            :src="navPlatform.icon"
+            :alt="navPlatform.name"
+            class="h-5 w-5 shrink-0 object-contain"
+          />
+          <span
+            v-else
+            class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent text-[10px] font-bold text-white"
+          >
+            {{ navPlatform.icon }}
+          </span>
+          <span class="text-[13px] font-semibold text-text">{{ navPlatform.name }}</span>
+        </button>
+        <div class="h-4 w-px shrink-0 bg-border" aria-hidden="true"></div>
+      </template>
+
       <!-- 存储状态徽章 -->
       <div
         :class="['badge', storageStatusClass, { clickable: isDatabaseAvailable }]"
@@ -69,10 +97,19 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t: $t } = useI18n()
+
+// 由 PlatformSelector 注入；书签、订阅等非平台页面拿不到时不渲染平台标识
+const platformNav = inject('platformNav', null)
+const navPlatform = computed(() => platformNav?.activePlatform?.value ?? null)
+const isNavIconImage = computed(() => {
+  const icon = navPlatform.value?.icon
+  return typeof icon === 'string' && (icon.endsWith('.svg') || icon.endsWith('.png'))
+})
+const handleBackToPlatforms = () => platformNav?.backToSelector?.()
 
 const props = defineProps({
   storageStatusText: { type: String, default: '' },

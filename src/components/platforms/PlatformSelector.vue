@@ -50,7 +50,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, provide, ref } from 'vue'
 import AugmentTokenManager from '../platform/AugmentTokenManager.vue'
 import AntigravityAccountManager from '../platform/AntigravityAccountManager.vue'
 import WindsurfAccountManager from '../platform/WindsurfAccountManager.vue'
@@ -139,6 +139,12 @@ const selectPlatformById = (platformId) => {
   activePlatformId.value = targetPlatform.id
   return targetPlatform
 }
+
+// 供各平台管理页的头部展示当前平台图标，并支持点击返回平台选择
+provide('platformNav', {
+  activePlatform,
+  backToSelector: clearSelection
+})
 
 defineExpose({ selectPlatformById, clearSelection })
 </script>

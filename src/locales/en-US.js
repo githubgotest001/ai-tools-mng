@@ -72,7 +72,8 @@ export default {
     title: 'Select Platform',
     description: 'Choose the platform you want to manage accounts for',
     ready: 'Ready',
-    comingSoon: 'Coming Soon'
+    comingSoon: 'Coming Soon',
+    backToSelector: 'Back to platform selection'
   },
   bookmarks: {
     pageDescription: 'Manage your bookmarks and frequently used links',
@@ -1425,21 +1426,36 @@ export default {
     totalsCostTooltip: 'Sum of listed events at API list price (including bonus-covered usage). "Charged" is the actual billed total, matching the Total Cost card above.'
   },
   cursorSessions: {
-    title: 'Active Sessions',
-    entry: 'Active Sessions',
-    entryHint: 'View this account\'s active sessions and revoke devices you no longer use',
+    title: 'Manage Login Devices',
+    entry: 'View Login Devices',
+    entryHint: 'View this account\'s login devices, filter them by type, and revoke the sessions you no longer need',
     refresh: 'Refresh',
     empty: 'No active sessions for this account',
     noSessionToken: 'This account has no session token, active sessions are unavailable',
     loadFailed: 'Failed to load active sessions',
+    securityNote: 'Before revoking: the session token stored in this tool is itself a "Web" session, and the API gives no way to tell which entry in the list it is. Revoking any Web session may therefore invalidate the stored token immediately (quota lookups and account switching would need a fresh one), so proceed carefully. Desktop, mobile and other session types are not affected.',
+    webTypeHint: 'Web session: the token stored in this tool is one of these and cannot be told apart, revoke with care',
+    filterLabel: 'Device type',
+    filterAll: 'All',
+    typeUnknown: 'Unknown type',
+    emptyFiltered: 'No login devices of this type',
     columns: {
       device: 'Device',
       type: 'Type',
       ip: 'IP',
       location: 'Location',
+      onlineFor: 'Online For',
       lastActive: 'Last Active',
       createdAt: 'Signed In',
       actions: 'Actions'
+    },
+    duration: {
+      lessThanMinute: '< 1 min',
+      days: '{n}d',
+      hours: '{n}h',
+      minutes: '{n}m',
+      seconds: '{n}s',
+      tooltip: 'Online for {duration}'
     },
     types: {
       web: 'Web',
@@ -1447,14 +1463,13 @@ export default {
       mobile: 'Mobile App',
       chromeExtension: 'Chrome Extension'
     },
-    currentBadge: 'Current device',
     revoke: 'Revoke',
     revoking: 'Revoking...',
     revokeConfirmTitle: 'Revoke this session?',
     revokeConfirmMessage: '"{device}" will be signed out and has to log in again.',
-    revokeCurrentConfirmTitle: 'Revoke the current session?',
-    revokeCurrentConfirmMessage:
-      '"{device}" is the session this account is currently using. Revoking it invalidates the session token stored here, so quota lookups and account switching will need a fresh token. Continue?',
+    revokeWebConfirmTitle: 'Revoke this web session?',
+    revokeWebConfirmMessage:
+      '"{device}" is a web session. The session token stored in this tool is also one of the web sessions and cannot be told apart — if this happens to be it, the stored token becomes invalid immediately and quota lookups / account switching will need a fresh one. Continue?',
     revokeSuccess: 'Session revoked',
     revokeFailed: 'Failed to revoke session',
     unknownDevice: 'Unknown device',

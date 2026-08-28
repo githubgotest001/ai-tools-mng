@@ -72,7 +72,8 @@ export default {
     title: '选择平台',
     description: '选择你要管理帐号的平台',
     ready: '可用',
-    comingSoon: '即将推出'
+    comingSoon: '即将推出',
+    backToSelector: '返回平台选择'
   },
   bookmarks: {
     pageDescription: '管理你的书签和常用链接',
@@ -1427,21 +1428,36 @@ export default {
     totalsCostTooltip: '按 API 标价的明细合计（含赠送额度抵扣的部分）。「计费」为实际计费合计，与上方总费用卡片对应。'
   },
   cursorSessions: {
-    title: '登录设备',
-    entry: '登录设备',
-    entryHint: '查看该账号的活跃会话，并踢出不需要的设备',
+    title: '登录设备管理',
+    entry: '查看登录设备',
+    entryHint: '查看该账号的登录设备，可按类型筛选并踢出不需要的会话',
     refresh: '刷新',
     empty: '该账号暂无活跃会话',
     noSessionToken: '该账号没有 Session Token，无法查询登录设备',
     loadFailed: '获取登录设备失败',
+    securityNote: '踢出设备前请注意：本工具保存的 Session Token 本身就是一条「网页」会话，而接口无法识别它对应列表中的哪一条。因此踢出任意「网页」类型设备都有可能使 Token 立即失效（配额查询、账号切换等需重新获取），请谨慎操作；桌面端、移动端等其他类型不受影响。',
+    webTypeHint: '网页会话：本工具保存的 Session Token 属于该类型且无法区分具体是哪一条，踢出需谨慎',
+    filterLabel: '设备类型',
+    filterAll: '全部',
+    typeUnknown: '未知类型',
+    emptyFiltered: '该类型下暂无登录设备',
     columns: {
       device: '设备',
       type: '类型',
       ip: 'IP',
       location: '地点',
+      onlineFor: '在线时长',
       lastActive: '最近活跃',
       createdAt: '登录时间',
       actions: '操作'
+    },
+    duration: {
+      lessThanMinute: '不足 1 分钟',
+      days: '{n} 天',
+      hours: '{n} 小时',
+      minutes: '{n} 分钟',
+      seconds: '{n} 秒',
+      tooltip: '已在线 {duration}'
     },
     types: {
       web: '网页',
@@ -1449,14 +1465,13 @@ export default {
       mobile: '移动端',
       chromeExtension: 'Chrome 扩展'
     },
-    currentBadge: '当前设备',
     revoke: '踢出',
     revoking: '踢出中...',
     revokeConfirmTitle: '踢出该登录设备？',
     revokeConfirmMessage: '将撤销「{device}」的登录状态，该设备需要重新登录。',
-    revokeCurrentConfirmTitle: '踢出当前设备？',
-    revokeCurrentConfirmMessage:
-      '「{device}」是本账号当前正在使用的会话。踢出后本工具保存的 Session Token 会立即失效，配额查询与账号切换都需要重新获取 Token。确认继续？',
+    revokeWebConfirmTitle: '踢出网页设备？',
+    revokeWebConfirmMessage:
+      '「{device}」是网页会话。本工具保存的 Session Token 也是网页会话之一，且无法识别具体对应哪一条——若恰好踢中，Token 将立即失效，配额查询与账号切换都需要重新获取 Token。确认继续？',
     revokeSuccess: '已踢出该登录设备',
     revokeFailed: '踢出失败',
     unknownDevice: '未知设备',

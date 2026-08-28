@@ -30,38 +30,76 @@
       </button>
     </template>
 
-    <div class="max-h-[60vh] overflow-y-auto">
-      <div v-if="loading && !sessions.length" class="flex justify-center py-10">
-        <span class="btn-spinner btn-spinner--lg"></span>
+    <div v-if="loading && !sessions.length" class="flex justify-center py-10">
+      <span class="btn-spinner btn-spinner--lg"></span>
+    </div>
+
+    <div v-else-if="error" class="text-danger text-center py-8 px-4 break-words">
+      {{ error }}
+    </div>
+
+    <div v-else-if="!sessions.length" class="text-text-muted text-center py-10">
+      {{ $t('cursorSessions.empty') }}
+    </div>
+
+    <template v-else>
+      <!-- 风险提示：本工具依赖的网页会话被踢会导致 Token 失效 -->
+      <div class="mb-3 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
+        <svg class="shrink-0 mt-0.5 text-amber-500" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+        </svg>
+        <p class="m-0 text-xs leading-relaxed text-text-secondary">{{ $t('cursorSessions.securityNote') }}</p>
       </div>
 
-      <div v-else-if="error" class="text-danger text-center py-8 px-4 break-words">
-        {{ error }}
+      <!-- 设备类型筛选 -->
+      <div class="mb-3 flex flex-wrap items-center gap-1.5">
+        <span class="mr-0.5 text-xs text-text-muted">{{ $t('cursorSessions.filterLabel') }}</span>
+        <button
+          type="button"
+          :class="['session-type-chip', typeFilter === 'all' ? 'session-type-chip--active' : '']"
+          @click="typeFilter = 'all'"
+        >
+          {{ $t('cursorSessions.filterAll') }}
+          <span class="opacity-70 tabular-nums">{{ sessions.length }}</span>
+        </button>
+        <button
+          v-for="[typeKey, count] in typeCounts"
+          :key="typeKey"
+          type="button"
+          :class="['session-type-chip', typeFilter === typeKey ? 'session-type-chip--active' : '']"
+          @click="typeFilter = typeKey"
+        >
+          {{ chipLabel(typeKey) }}
+          <span class="opacity-70 tabular-nums">{{ count }}</span>
+        </button>
       </div>
 
-      <div v-else-if="!sessions.length" class="text-text-muted text-center py-10">
-        {{ $t('cursorSessions.empty') }}
-      </div>
+      <div class="max-h-[52vh] overflow-y-auto">
+        <div v-if="!filteredSessions.length" class="text-text-muted text-center py-10">
+          {{ $t('cursorSessions.emptyFiltered') }}
+        </div>
 
-      <table v-else class="w-full text-sm">
-        <thead>
-          <tr>
-            <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.device') }}</th>
-            <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.type') }}</th>
-            <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.ip') }}</th>
-            <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.location') }}</th>
-            <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.lastActive') }}</th>
-            <th class="text-right text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.actions') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="session in sessions" :key="session.id" class="hover:bg-hover align-top">
+        <table v-else class="w-full text-sm">
+          <thead>
+            <tr>
+              <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.device') }}</th>
+              <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.type') }}</th>
+              <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.ip') }}</th>
+              <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.location') }}</th>
+              <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.onlineFor') }}</th>
+              <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.lastActive') }}</th>
+              <th class="text-right text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-3 border-b border-border">{{ $t('cursorSessions.columns.actions') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="session in filteredSessions"
+              :key="session.id"
+              class="hover:bg-hover align-top"
+            >
             <td class="py-3 px-3 border-b border-border text-text-strong">
               <div class="flex items-center gap-1.5 flex-wrap">
                 <span class="break-all">{{ session.device || $t('cursorSessions.unknownDevice') }}</span>
-                <span v-if="session.isCurrent" class="badge badge--sm badge--success-tech">
-                  {{ $t('cursorSessions.currentBadge') }}
-                </span>
               </div>
               <div
                 v-if="session.createdAt"
@@ -80,13 +118,32 @@
                 class="mt-1 max-w-[280px] overflow-x-auto rounded bg-muted/60 p-2 text-[11px] leading-snug text-text-muted"
               >{{ formatRaw(session.raw) }}</pre>
             </td>
-            <td class="py-3 px-3 border-b border-border text-text-strong">{{ typeLabel(session.sessionType) }}</td>
+            <td class="py-3 px-3 border-b border-border text-text-strong">
+              <span
+                v-if="isWebSession(session)"
+                class="badge badge--sm badge--warning"
+                v-tooltip="$t('cursorSessions.webTypeHint')"
+              >
+                {{ typeLabel(session.sessionType) }}
+              </span>
+              <template v-else>{{ typeLabel(session.sessionType) }}</template>
+            </td>
             <td class="py-3 px-3 border-b border-border text-text-strong tabular-nums">{{ session.ipAddress || '-' }}</td>
             <td class="py-3 px-3 border-b border-border text-text-strong">{{ session.location || '-' }}</td>
+            <td class="py-3 px-3 border-b border-border text-text-strong tabular-nums whitespace-nowrap">
+              <span
+                v-if="onlineDurationMs(session) !== null"
+                v-tooltip="preciseDuration(onlineDurationMs(session))"
+                class="cursor-default"
+              >
+                {{ relativeDuration(onlineDurationMs(session)) }}
+              </span>
+              <template v-else>-</template>
+            </td>
             <td class="py-3 px-3 border-b border-border text-text-strong tabular-nums">{{ formatTime(session.lastActiveAt) }}</td>
             <td class="py-3 px-3 border-b border-border text-right">
               <button
-                class="btn btn--danger btn--sm"
+                class="btn btn--danger btn--sm whitespace-nowrap"
                 :disabled="revokingId === session.id"
                 @click="confirmRevoke(session)"
               >
@@ -94,10 +151,11 @@
                 {{ revokingId === session.id ? $t('cursorSessions.revoking') : $t('cursorSessions.revoke') }}
               </button>
             </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
 
     <template #footer>
       <span class="text-[11px] text-text-muted">{{ $t('cursorSessions.apiNote') }}</span>
@@ -106,7 +164,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
 import BaseModal from '../common/BaseModal.vue'
@@ -124,6 +182,7 @@ const error = ref(null)
 const sessions = ref([])
 const revokingId = ref(null)
 const expandedId = ref(null)
+const typeFilter = ref('all')
 
 const sessionToken = computed(() => props.account.token?.workos_cursor_session_token)
 
@@ -141,14 +200,90 @@ const typeLabel = (sessionType) => {
   return key ? $t(`cursorSessions.types.${key}`) : sessionType
 }
 
-const formatTime = (value) => {
-  if (!value) return '-'
+const isWebSession = (session) => session.sessionType === 'SESSION_TYPE_WEB'
+
+// ===== 设备类型筛选 =====
+const UNKNOWN_TYPE_KEY = '__unknown__'
+const KNOWN_TYPE_ORDER = Object.keys(SESSION_TYPE_LABELS)
+
+const sessionTypeKey = (session) => session.sessionType || UNKNOWN_TYPE_KEY
+
+// [typeKey, count]，已知类型按 web/桌面端/移动端/扩展 排序，未知类型排在最后
+const typeCounts = computed(() => {
+  const counts = new Map()
+  for (const session of sessions.value) {
+    const key = sessionTypeKey(session)
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  const rank = (key) => {
+    const index = KNOWN_TYPE_ORDER.indexOf(key)
+    return index === -1 ? KNOWN_TYPE_ORDER.length : index
+  }
+  return [...counts.entries()].sort((a, b) => rank(a[0]) - rank(b[0]))
+})
+
+const chipLabel = (typeKey) =>
+  typeKey === UNKNOWN_TYPE_KEY ? $t('cursorSessions.typeUnknown') : typeLabel(typeKey)
+
+const filteredSessions = computed(() => {
+  if (typeFilter.value === 'all') return sessions.value
+  return sessions.value.filter((session) => sessionTypeKey(session) === typeFilter.value)
+})
+
+// 所选类型的设备被踢空（或刷新后消失）时自动回到「全部」
+watch(typeCounts, (counts) => {
+  if (typeFilter.value !== 'all' && !counts.some(([key]) => key === typeFilter.value)) {
+    typeFilter.value = 'all'
+  }
+})
+
+// 毫秒时间戳可能以字符串形式返回，秒级的要补成毫秒；解析不了返回 null
+const parseTime = (value) => {
+  if (!value) return null
   const numeric = Number(value)
-  // 毫秒时间戳可能以字符串形式返回，秒级的要补成毫秒
   const date = Number.isFinite(numeric) && numeric > 0
     ? new Date(numeric > 1e12 ? numeric : numeric * 1000)
     : new Date(value)
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString()
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+const formatTime = (value) => {
+  if (!value) return '-'
+  const date = parseTime(value)
+  return date ? date.toLocaleString() : String(value)
+}
+
+// ===== 在线时长（自登录时间起算） =====
+const MINUTE_MS = 60 * 1000
+const HOUR_MS = 60 * MINUTE_MS
+const DAY_MS = 24 * HOUR_MS
+
+// 时钟偏差可能算出轻微负值，钳到 0 当作刚登录
+const onlineDurationMs = (session) => {
+  const created = parseTime(session.createdAt)
+  return created ? Math.max(0, Date.now() - created.getTime()) : null
+}
+
+// 列内只展示单一单位的粗粒度时长，保持可扫读
+const relativeDuration = (ms) => {
+  if (ms < MINUTE_MS) return $t('cursorSessions.duration.lessThanMinute')
+  if (ms < HOUR_MS) return $t('cursorSessions.duration.minutes', { n: Math.floor(ms / MINUTE_MS) })
+  if (ms < DAY_MS) return $t('cursorSessions.duration.hours', { n: Math.floor(ms / HOUR_MS) })
+  return $t('cursorSessions.duration.days', { n: Math.floor(ms / DAY_MS) })
+}
+
+// hover 提示给出完整的天/时/分/秒分解
+const preciseDuration = (ms) => {
+  const days = Math.floor(ms / DAY_MS)
+  const hours = Math.floor((ms % DAY_MS) / HOUR_MS)
+  const minutes = Math.floor((ms % HOUR_MS) / MINUTE_MS)
+  const seconds = Math.floor((ms % MINUTE_MS) / 1000)
+  const parts = []
+  if (days) parts.push($t('cursorSessions.duration.days', { n: days }))
+  if (hours) parts.push($t('cursorSessions.duration.hours', { n: hours }))
+  if (minutes) parts.push($t('cursorSessions.duration.minutes', { n: minutes }))
+  if (seconds || !parts.length) parts.push($t('cursorSessions.duration.seconds', { n: seconds }))
+  return $t('cursorSessions.duration.tooltip', { duration: parts.join(' ') })
 }
 
 const formatRaw = (raw) => JSON.stringify(raw ?? {}, null, 2)
@@ -179,13 +314,14 @@ const fetchSessions = async () => {
 
 const confirmRevoke = async (session) => {
   const device = session.device || typeLabel(session.sessionType) || $t('cursorSessions.unknownDevice')
-  // 踢掉当前会话会连带作废本工具存的 Session Token，单独提示
+  // 本工具的 Session Token 也是网页会话且无法区分是哪一条，踢网页设备可能连带失效，单独提示
+  const isWeb = isWebSession(session)
   const confirmed = await window.$confirm?.({
-    title: session.isCurrent
-      ? $t('cursorSessions.revokeCurrentConfirmTitle')
+    title: isWeb
+      ? $t('cursorSessions.revokeWebConfirmTitle')
       : $t('cursorSessions.revokeConfirmTitle'),
-    message: session.isCurrent
-      ? $t('cursorSessions.revokeCurrentConfirmMessage', { device })
+    message: isWeb
+      ? $t('cursorSessions.revokeWebConfirmMessage', { device })
       : $t('cursorSessions.revokeConfirmMessage', { device }),
     variant: 'danger'
   })
@@ -209,3 +345,32 @@ const confirmRevoke = async (session) => {
 
 onMounted(fetchSessions)
 </script>
+
+<style scoped>
+.session-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.session-type-chip:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.session-type-chip--active {
+  border-color: var(--color-border-accent-tech);
+  background: var(--color-accent-tech);
+  color: var(--color-accent);
+}
+</style>
