@@ -214,6 +214,9 @@ pub struct UsageEventDisplay {
     pub token_usage: Option<TokenUsageDetail>,
     #[serde(rename = "owningUser")]
     pub owning_user: String,
+    /// 实际计费美分。赠送额度（FREE_CREDIT）与未计费请求为 0
+    #[serde(rename = "chargedCents", default)]
+    pub charged_cents: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

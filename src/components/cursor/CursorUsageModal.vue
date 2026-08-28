@@ -14,36 +14,69 @@
         </svg>
         <h3 class="modal-title">{{ $t('cursorUsage.title') }}</h3>
       </div>
-      <button @click="refresh" class="btn btn--ghost btn--icon" :disabled="loading">
-        <svg v-if="!loading" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <button @click="refresh" class="btn btn--ghost btn--icon" :disabled="eventsLoading">
+        <svg v-if="!eventsLoading" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
           <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
         </svg>
         <span v-else class="btn-spinner"></span>
       </button>
     </template>
 
-    <!-- 基本信息区域 -->
+    <!-- 时间范围筛选：快捷区间 + 自定义起止日期 -->
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <div class="flex flex-wrap items-center gap-1.5">
+        <button
+          v-for="preset in rangePresets"
+          :key="preset.key"
+          class="px-2 py-1 rounded border text-[12px] leading-none transition-colors"
+          :class="rangePreset === preset.key
+            ? 'bg-accent/15 text-accent border-accent/30'
+            : 'bg-transparent text-text-muted border-border hover:text-text-strong'"
+          @click="applyPreset(preset.key)"
+        >
+          {{ preset.label }}
+        </button>
+      </div>
+      <div class="flex items-center gap-1.5 ml-auto">
+        <input
+          v-model="startDateStr"
+          type="date"
+          class="input !w-[138px] h-8 px-2 py-1 text-[12px]"
+          @change="onDateInputChange"
+        />
+        <span class="text-[12px] text-text-muted">{{ $t('cursorUsage.dateTo') }}</span>
+        <input
+          v-model="endDateStr"
+          type="date"
+          class="input !w-[138px] h-8 px-2 py-1 text-[12px]"
+          @change="onDateInputChange"
+        />
+      </div>
+    </div>
+
+    <!-- 基本信息区域（跟随所选时间范围，由明细事件汇总，与下方合计同口径） -->
     <div class="mb-6">
-      <div v-if="loading && !aggregatedData" class="flex justify-center py-8">
+      <div v-if="eventsLoading && !usageEvents.length" class="flex justify-center py-8">
         <span class="btn-spinner btn-spinner--lg"></span>
       </div>
-      <div v-else-if="error" class="text-danger text-center py-4">{{ error }}</div>
+      <div v-else-if="eventsError && !usageEvents.length" class="text-danger text-center py-4">{{ eventsError }}</div>
       <div v-else class="grid grid-cols-3 gap-4">
         <div class="card hover:translate-y-0 p-4">
           <div class="text-xs text-text-muted mb-1">{{ $t('cursorUsage.totalInputTokens') }}</div>
-          <div class="text-lg font-semibold text-text-strong" v-tooltip="formatNumberFull(aggregatedData?.totalInputTokens)">{{ formatTokenUnit(aggregatedData?.totalInputTokens) }}</div>
-          <div v-if="toNum(aggregatedData?.totalCacheWriteTokens)" class="text-[11px] text-text-muted mt-1">{{ $t('cursorUsage.cacheWrite') }}: <span v-tooltip="formatNumberFull(aggregatedData?.totalCacheWriteTokens)">{{ formatTokenUnit(aggregatedData?.totalCacheWriteTokens) }}</span></div>
+          <div class="text-lg font-semibold text-text-strong" v-tooltip="formatNumberFull(summaryTotals.inputTokens)">{{ formatTokenUnit(summaryTotals.inputTokens) }}</div>
+          <div v-if="summaryTotals.cacheWriteTokens" class="text-[11px] text-text-muted mt-1">{{ $t('cursorUsage.cacheWrite') }}: <span v-tooltip="formatNumberFull(summaryTotals.cacheWriteTokens)">{{ formatTokenUnit(summaryTotals.cacheWriteTokens) }}</span></div>
         </div>
         <div class="card hover:translate-y-0 p-4">
           <div class="text-xs text-text-muted mb-1">{{ $t('cursorUsage.totalOutputTokens') }}</div>
-          <div class="text-lg font-semibold text-text-strong" v-tooltip="formatNumberFull(aggregatedData?.totalOutputTokens)">{{ formatTokenUnit(aggregatedData?.totalOutputTokens) }}</div>
-          <div v-if="toNum(aggregatedData?.totalCacheReadTokens)" class="text-[11px] text-text-muted mt-1">{{ $t('cursorUsage.cacheRead') }}: <span v-tooltip="formatNumberFull(aggregatedData?.totalCacheReadTokens)">{{ formatTokenUnit(aggregatedData?.totalCacheReadTokens) }}</span></div>
+          <div class="text-lg font-semibold text-text-strong" v-tooltip="formatNumberFull(summaryTotals.outputTokens)">{{ formatTokenUnit(summaryTotals.outputTokens) }}</div>
+          <div v-if="summaryTotals.cacheReadTokens" class="text-[11px] text-text-muted mt-1">{{ $t('cursorUsage.cacheRead') }}: <span v-tooltip="formatNumberFull(summaryTotals.cacheReadTokens)">{{ formatTokenUnit(summaryTotals.cacheReadTokens) }}</span></div>
         </div>
         <div class="card hover:translate-y-0 p-4">
-          <div class="text-xs text-text-muted mb-1">{{ $t('cursorUsage.totalCost') }}</div>
-          <div v-if="planBreakdownLabel" class="text-[11px] text-text-muted mb-1">{{ $t('cursorUsage.onPlan') }}: {{ planBreakdownLabel }}</div>
-          <div class="text-lg font-semibold text-text-strong">${{ (aggregatedData?.totalCostCents / 100).toFixed(2) || '0.00' }}</div>
-          <div v-if="individualUsage?.onDemand?.enabled" class="text-[11px] text-text-muted mt-1">{{ $t('cursorUsage.onDemand') }}: ${{ formatCents(individualUsage.onDemand.used) }}{{ onDemandLimitLabel }}</div>
+          <div class="text-xs text-text-muted mb-1 cursor-help" v-tooltip="$t('cursorUsage.totalCostHint')">{{ $t('cursorUsage.totalCost') }}</div>
+          <div v-if="planBreakdownLabel" class="text-[11px] text-text-muted mb-1 cursor-help" v-tooltip="$t('cursorUsage.onPlanHint')">{{ $t('cursorUsage.onPlan') }}: {{ planBreakdownLabel }}</div>
+          <div class="text-lg font-semibold text-text-strong">${{ formatCents(summaryTotals.chargedCents) }}</div>
+          <div v-if="individualUsage?.onDemand?.enabled" class="text-[11px] text-text-muted mt-1 cursor-help" v-tooltip="$t('cursorUsage.onDemandHint')">{{ $t('cursorUsage.onDemand') }}: ${{ formatCents(individualUsage.onDemand.used) }}{{ onDemandLimitLabel }}</div>
+          <div v-if="freeCreditCents > 0" class="text-[11px] text-success mt-1 cursor-help" v-tooltip="$t('cursorUsage.freeCreditDeductedHint')">{{ $t('cursorUsage.freeCreditDeducted') }}: ${{ formatCents(freeCreditCents) }}</div>
         </div>
       </div>
       <div v-if="showPlanQuota || totalRemainingPercent !== null || autoRemainingPercent !== null || apiRemainingPercent !== null || showGrokBot" class="mt-3 grid gap-3" :class="quotaGridClass">
@@ -74,8 +107,8 @@
       </div>
     </div>
 
-    <!-- Tab 切换区域 -->
-    <div class="border-b border-border mb-4">
+    <!-- Tab 切换 + 模型筛选 -->
+    <div class="border-b border-border mb-4 flex items-end justify-between gap-3">
       <div class="flex gap-4">
         <button
           v-for="tab in tabs"
@@ -86,80 +119,113 @@
               ? 'text-accent border-accent'
               : 'text-text-muted border-transparent hover:text-text-strong'
           ]"
-          @click="switchTab(tab.key)"
+          @click="activeTab = tab.key"
         >
           {{ tab.label }}
         </button>
       </div>
+      <div class="flex items-center gap-2 pb-1.5">
+        <span v-if="!eventsLoading && !eventsError" class="text-[11px] text-text-muted whitespace-nowrap">
+          {{ $t('cursorUsage.eventsCount', { count: filteredTotals.count }) }}
+        </span>
+        <select
+          v-model="selectedModel"
+          class="input !w-auto max-w-[220px] h-7 !px-2 !py-0.5 text-[12px]"
+          :disabled="eventsLoading || !modelOptions.length"
+        >
+          <option value="">{{ $t('cursorUsage.allModels') }}</option>
+          <option v-for="model in modelOptions" :key="model" :value="model">{{ model }}</option>
+        </select>
+      </div>
     </div>
 
-    <!-- 内容区域 -->
+    <!-- 图表区域 -->
     <div v-if="isChartView" class="max-h-[calc(65vh-120px)] overflow-y-auto">
       <div v-if="eventsLoading" class="flex justify-center py-8">
         <span class="btn-spinner btn-spinner--lg"></span>
       </div>
       <div v-else-if="eventsError" class="text-danger text-center py-4">{{ eventsError }}</div>
-      <template v-else>
-        <div class="flex items-center gap-3 text-xs text-text-muted mb-3">
-          <span v-if="billingCycleLabel && !chartAllData">{{ $t('cursorUsage.billingCycle') }}: {{ billingCycleLabel }}</span>
-          <span v-if="chartAllData">{{ $t('cursorUsage.allDataRange') }}</span>
-          <button
-            class="px-2 py-0.5 rounded border transition-colors text-[11px]"
-            :class="chartAllData
-              ? 'bg-accent/15 text-accent border-accent/30'
-              : 'bg-transparent text-text-muted border-border hover:text-text-strong'"
-            @click="toggleChartAllData"
-          >
-            {{ $t('cursorUsage.allData') }}
-          </button>
-        </div>
-        <CursorUsageCharts :usage-events="chartEvents" />
-      </template>
+      <CursorUsageCharts v-else :usage-events="filteredEvents" :granularity="chartGranularity" />
     </div>
 
     <!-- 使用事件表格 -->
-    <div v-else class="overflow-x-auto max-h-[400px] overflow-y-auto">
-      <div v-if="eventsLoading" class="flex justify-center py-8">
-        <span class="btn-spinner btn-spinner--lg"></span>
+    <template v-else>
+      <div v-if="!eventsLoading && (fetchCapped || displayTruncated)" class="text-[11px] text-text-muted mb-2">
+        {{ truncatedHint }}
       </div>
-      <div v-else-if="eventsError" class="text-danger text-center py-4">{{ eventsError }}</div>
-      <div v-else-if="!usageEvents?.length" class="text-text-muted text-center py-8">
-        {{ $t('cursorUsage.noEvents') }}
+      <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+        <div v-if="eventsLoading" class="flex justify-center py-8">
+          <span class="btn-spinner btn-spinner--lg"></span>
+        </div>
+        <div v-else-if="eventsError" class="text-danger text-center py-4">{{ eventsError }}</div>
+        <div v-else-if="!filteredEvents.length" class="text-text-muted text-center py-8">
+          {{ $t('cursorUsage.noEvents') }}
+        </div>
+        <table v-else class="w-full text-sm border-separate border-spacing-0">
+          <thead>
+            <tr>
+              <th class="sticky top-0 z-10 bg-surface text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-4 border-b border-border">{{ $t('cursorUsage.timestamp') }}</th>
+              <th class="sticky top-0 z-10 bg-surface text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-4 border-b border-border">{{ $t('cursorUsage.model') }}</th>
+              <th class="sticky top-0 z-10 bg-surface text-right text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-4 border-b border-border">{{ $t('cursorUsage.inputTokens') }}</th>
+              <th class="sticky top-0 z-10 bg-surface text-right text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-4 border-b border-border">{{ $t('cursorUsage.outputTokens') }}</th>
+              <th class="sticky top-0 z-10 bg-surface text-right text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-4 border-b border-border">{{ $t('cursorUsage.cost') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(event, index) in displayEvents" :key="index" class="hover:bg-hover">
+              <td class="py-3 px-4 border-b border-border text-text-strong">{{ formatTimestamp(event.timestamp) }}</td>
+              <td class="py-3 px-4 border-b border-border text-text-strong">{{ event.model }}</td>
+              <td class="py-3 px-4 border-b border-border text-text-strong text-right">
+                <span v-tooltip="formatNumberFull(event.tokenUsage?.inputTokens) + (toNum(event.tokenUsage?.cacheWriteTokens) ? `\n${$t('cursorUsage.cacheWrite')}: ${formatNumberFull(event.tokenUsage?.cacheWriteTokens)}` : '')">
+                  {{ formatTokenUnit(event.tokenUsage?.inputTokens) }}
+                </span>
+              </td>
+              <td class="py-3 px-4 border-b border-border text-text-strong text-right">
+                <span v-tooltip="formatNumberFull(event.tokenUsage?.outputTokens) + (toNum(event.tokenUsage?.cacheReadTokens) ? `\n${$t('cursorUsage.cacheRead')}: ${formatNumberFull(event.tokenUsage?.cacheReadTokens)}` : '')">
+                  {{ formatTokenUnit(event.tokenUsage?.outputTokens) }}
+                </span>
+              </td>
+              <td class="py-3 px-4 border-b border-border text-text-strong text-right whitespace-nowrap">
+                <template v-if="event.tokenUsage?.totalCents">
+                  <span v-tooltip="eventCostTooltip(event)">${{ (event.tokenUsage.totalCents / 100).toFixed(4) }}</span>
+                  <span v-if="isFreeCreditEvent(event)" class="ml-1 inline-block px-1 py-px rounded bg-success/15 text-success text-[10px] leading-4 align-middle">{{ $t('cursorUsage.freeCredit') }}</span>
+                </template>
+                <template v-else>-</template>
+              </td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="font-semibold">
+              <td class="sticky bottom-0 z-10 bg-muted py-2.5 px-4 border-t border-border text-text-strong">{{ $t('cursorUsage.totalWithCount', { count: filteredTotals.count }) }}</td>
+              <td class="sticky bottom-0 z-10 bg-muted py-2.5 px-4 border-t border-border text-text-strong">
+                {{ selectedModel || $t('cursorUsage.modelsCount', { count: filteredTotals.models }) }}
+              </td>
+              <td class="sticky bottom-0 z-10 bg-muted py-2.5 px-4 border-t border-border text-text-strong text-right">
+                <span v-tooltip="formatNumberFull(filteredTotals.inputTokens) + (filteredTotals.cacheWriteTokens ? `\n${$t('cursorUsage.cacheWrite')}: ${formatNumberFull(filteredTotals.cacheWriteTokens)}` : '')">
+                  {{ formatTokenUnit(filteredTotals.inputTokens) }}
+                </span>
+              </td>
+              <td class="sticky bottom-0 z-10 bg-muted py-2.5 px-4 border-t border-border text-text-strong text-right">
+                <span v-tooltip="formatNumberFull(filteredTotals.outputTokens) + (filteredTotals.cacheReadTokens ? `\n${$t('cursorUsage.cacheRead')}: ${formatNumberFull(filteredTotals.cacheReadTokens)}` : '')">
+                  {{ formatTokenUnit(filteredTotals.outputTokens) }}
+                </span>
+              </td>
+              <td class="sticky bottom-0 z-10 bg-muted py-2.5 px-4 border-t border-border text-text-strong text-right whitespace-nowrap">
+                <div class="cursor-help" v-tooltip="$t('cursorUsage.totalsCostTooltip')">
+                  <div>{{ totalCostLabel }}</div>
+                  <div v-if="totalsChargedDiffers" class="text-[10px] font-normal text-text-muted">{{ $t('cursorUsage.chargedLabel') }} {{ totalChargedLabel }}</div>
+                </div>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
-      <table v-else class="w-full text-sm">
-        <thead>
-          <tr>
-            <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-4 border-b border-border">{{ $t('cursorUsage.timestamp') }}</th>
-            <th class="text-left text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-4 border-b border-border">{{ $t('cursorUsage.model') }}</th>
-            <th class="text-right text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-4 border-b border-border">{{ $t('cursorUsage.inputTokens') }}</th>
-            <th class="text-right text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-4 border-b border-border">{{ $t('cursorUsage.outputTokens') }}</th>
-            <th class="text-right text-xs font-medium text-text-muted uppercase tracking-wider py-3 px-4 border-b border-border">{{ $t('cursorUsage.cost') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(event, index) in usageEvents" :key="index" class="hover:bg-hover">
-            <td class="py-3 px-4 border-b border-border text-text-strong">{{ formatTimestamp(event.timestamp) }}</td>
-            <td class="py-3 px-4 border-b border-border text-text-strong">{{ event.model }}</td>
-            <td class="py-3 px-4 border-b border-border text-text-strong text-right">
-              <span v-tooltip="formatNumberFull(event.tokenUsage?.inputTokens) + (toNum(event.tokenUsage?.cacheWriteTokens) ? `\n${$t('cursorUsage.cacheWrite')}: ${formatNumberFull(event.tokenUsage?.cacheWriteTokens)}` : '')">
-                {{ formatTokenUnit(event.tokenUsage?.inputTokens) }}
-              </span>
-            </td>
-            <td class="py-3 px-4 border-b border-border text-text-strong text-right">
-              <span v-tooltip="formatNumberFull(event.tokenUsage?.outputTokens) + (toNum(event.tokenUsage?.cacheReadTokens) ? `\n${$t('cursorUsage.cacheRead')}: ${formatNumberFull(event.tokenUsage?.cacheReadTokens)}` : '')">
-                {{ formatTokenUnit(event.tokenUsage?.outputTokens) }}
-              </span>
-            </td>
-            <td class="py-3 px-4 border-b border-border text-text-strong text-right">{{ event.tokenUsage?.totalCents ? `$${(event.tokenUsage.totalCents / 100).toFixed(4)}` : '-' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    </template>
   </BaseModal>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
 import BaseModal from '../common/BaseModal.vue'
@@ -183,20 +249,32 @@ const props = defineProps({
 const emit = defineEmits(['close', 'account-synced'])
 
 // 状态
-const loading = ref(false)
-const error = ref(null)
 const eventsLoading = ref(false)
 const eventsError = ref(null)
-const aggregatedData = ref(null)
 const usageEvents = ref([])
-const activeTab = ref('1day')
+const eventsTotalCount = ref(0)
+const activeTab = ref('details')
 
-const tabs = [
-  { key: '1day', label: $t('cursorUsage.tab1Day'), days: 1 },
-  { key: '1week', label: $t('cursorUsage.tab1Week'), days: 7 },
-  { key: '1month', label: $t('cursorUsage.tab1Month'), days: 30 },
-  { key: 'charts', label: $t('cursorUsage.tabCharts'), days: 30 }
-]
+// 时间范围（rangeStartTs/rangeEndTs 为 null 表示查询全部历史数据）
+const rangePreset = ref('today')
+const startDateStr = ref('')
+const endDateStr = ref('')
+const rangeStartTs = ref(null)
+const rangeEndTs = ref(null)
+const selectedModel = ref('')
+
+// 竞态保护：只应用最后一次请求的结果
+let eventsSeq = 0
+
+const PAGE_SIZE = 1000
+const MAX_PAGES = 10
+const MAX_DISPLAY_ROWS = 1000
+const FREE_CREDIT_KIND = 'USAGE_EVENT_KIND_FREE_CREDIT'
+
+const tabs = computed(() => [
+  { key: 'details', label: $t('cursorUsage.tabDetails') },
+  { key: 'charts', label: $t('cursorUsage.tabCharts') }
+])
 
 const sessionToken = computed(() => props.account.token?.workos_cursor_session_token)
 const individualUsage = computed(() => props.account.individual_usage)
@@ -225,13 +303,30 @@ const quotaGridClass = computed(() => {
   return QUOTA_GRID_CLASSES[count]
 })
 const isChartView = computed(() => activeTab.value === 'charts')
-const chartEvents = ref([])
-const chartAllData = ref(false)
-const billingCycleLabel = computed(() => {
+
+const billingCycle = computed(() => {
   const usage = individualUsage.value
   if (!usage?.billingCycleStart || !usage?.billingCycleEnd) return null
-  const fmt = (iso) => new Date(iso).toLocaleDateString()
-  return `${fmt(usage.billingCycleStart)} - ${fmt(usage.billingCycleEnd)}`
+  const start = new Date(usage.billingCycleStart).getTime()
+  const end = new Date(usage.billingCycleEnd).getTime()
+  if (isNaN(start) || isNaN(end)) return null
+  return { start, end }
+})
+
+const rangePresets = computed(() => {
+  const presets = [
+    { key: 'today', label: $t('cursorUsage.rangeToday') },
+    { key: 'yesterday', label: $t('cursorUsage.rangeYesterday') },
+    { key: 'thisWeek', label: $t('cursorUsage.rangeThisWeek') },
+    { key: 'thisMonth', label: $t('cursorUsage.rangeThisMonth') },
+    { key: 'last7', label: $t('cursorUsage.rangeLast7Days') },
+    { key: 'last30', label: $t('cursorUsage.rangeLast30Days') }
+  ]
+  if (billingCycle.value) {
+    presets.push({ key: 'billing', label: $t('cursorUsage.billingCycle') })
+  }
+  presets.push({ key: 'all', label: $t('cursorUsage.rangeAll') })
+  return presets
 })
 
 const formatCents = (value) => {
@@ -258,23 +353,96 @@ const onDemandLimitLabel = computed(() => {
   return limit === null || limit === undefined ? '' : ` / $${formatCents(limit)}`
 })
 
-// 日期格式化
-const getDateRange = (days) => {
-  const end = new Date()
-  const start = new Date()
-  start.setDate(start.getDate() - days)
-  return {
-    startDate: start.toISOString().split('T')[0],
-    endDate: end.toISOString().split('T')[0],
-    startTimestamp: start.getTime(),  // 毫秒
-    endTimestamp: end.getTime()       // 毫秒
-  }
+// --- 日期工具（全部按本地时区处理） ---
+
+const toDateStr = (date) => {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
-const formatNumber = (value) => {
-  if (!value) return '0'
-  return parseInt(value).toLocaleString()
+const parseDateStr = (str) => {
+  const [y, m, d] = str.split('-').map(Number)
+  return new Date(y, m - 1, d)
 }
+
+const startOfDayTs = (str) => parseDateStr(str).getTime()
+
+const endOfDayTs = (str) => {
+  const date = parseDateStr(str)
+  date.setHours(23, 59, 59, 999)
+  return date.getTime()
+}
+
+const presetDates = (key) => {
+  const today = new Date()
+  const start = new Date(today)
+  switch (key) {
+    case 'yesterday':
+      start.setDate(start.getDate() - 1)
+      return { start, end: new Date(start) }
+    case 'thisWeek':
+      // 周一为一周起点
+      start.setDate(start.getDate() - (today.getDay() + 6) % 7)
+      break
+    case 'thisMonth':
+      start.setDate(1)
+      break
+    case 'last7':
+      start.setDate(start.getDate() - 6)
+      break
+    case 'last30':
+      start.setDate(start.getDate() - 29)
+      break
+  }
+  return { start, end: today }
+}
+
+const applyPreset = (key) => {
+  rangePreset.value = key
+  if (key === 'all') {
+    startDateStr.value = ''
+    endDateStr.value = ''
+    rangeStartTs.value = null
+    rangeEndTs.value = null
+  } else if (key === 'billing') {
+    const cycle = billingCycle.value
+    if (!cycle) return
+    // 账期用精确的账单周期时刻查询，输入框仅展示对应日期
+    startDateStr.value = toDateStr(new Date(cycle.start))
+    endDateStr.value = toDateStr(new Date(cycle.end))
+    rangeStartTs.value = cycle.start
+    rangeEndTs.value = cycle.end
+  } else {
+    const { start, end } = presetDates(key)
+    startDateStr.value = toDateStr(start)
+    endDateStr.value = toDateStr(end)
+    rangeStartTs.value = startOfDayTs(startDateStr.value)
+    rangeEndTs.value = endOfDayTs(endDateStr.value)
+  }
+  refetchRangeData()
+}
+
+const onDateInputChange = () => {
+  if (!startDateStr.value && !endDateStr.value) return
+  // 只填一端时自动补全另一端
+  if (!startDateStr.value) startDateStr.value = endDateStr.value
+  if (!endDateStr.value) {
+    const todayStr = toDateStr(new Date())
+    endDateStr.value = todayStr < startDateStr.value ? startDateStr.value : todayStr
+  }
+  // 起止倒置时自动交换
+  if (startDateStr.value > endDateStr.value) {
+    ;[startDateStr.value, endDateStr.value] = [endDateStr.value, startDateStr.value]
+  }
+  rangePreset.value = 'custom'
+  rangeStartTs.value = startOfDayTs(startDateStr.value)
+  rangeEndTs.value = endOfDayTs(endDateStr.value)
+  refetchRangeData()
+}
+
+// --- 格式化 ---
 
 const toNum = (value) => {
   if (!value) return 0
@@ -316,142 +484,190 @@ const formatTimestamp = (timestamp) => {
   return isNaN(date.getTime()) ? '-' : date.toLocaleString()
 }
 
-// 从 events 计算聚合数据
-const calculateAggregatedFromEvents = (events) => {
-  if (!events?.length) return null
+// --- 数据获取 ---
 
-  let totalInputTokens = 0
-  let totalOutputTokens = 0
-  let totalCostCents = 0
-
-  for (const event of events) {
-    if (event.tokenUsage) {
-      totalInputTokens += event.tokenUsage.inputTokens || 0
-      totalOutputTokens += event.tokenUsage.outputTokens || 0
-      totalCostCents += (event.tokenUsage.totalCents || 0) * 100
-    }
-  }
-
-  return {
-    total_input_tokens: totalInputTokens.toString(),
-    total_output_tokens: totalOutputTokens.toString(),
-    total_cost_cents: totalCostCents
-  }
-}
-
-// 获取聚合数据
-const fetchBasicData = async () => {
+// 获取使用事件（范围内分页拉全，汇总卡片/明细/图表共用同一份数据）。
+// 注：不再调用聚合接口 —— 其费用口径（不含按需已计费部分）与明细对不上、
+// 模型归因与明细不一致，且跨后端分片边界的时间范围会直接报 400/500。
+const fetchEvents = async () => {
   if (!sessionToken.value) {
-    error.value = 'No session token'
+    eventsError.value = 'No session token'
     return
   }
 
-  loading.value = true
-  error.value = null
-
-  try {
-    const { startTimestamp, endTimestamp } = getDateRange(30)
-
-    const aggData = await invoke('cursor_get_aggregated_usage', {
-      sessionToken: sessionToken.value,
-      startDate: startTimestamp,
-      endDate: endTimestamp,
-      teamId: 0
-    })
-    aggregatedData.value = aggData
-  } catch (e) {
-    error.value = e.toString()
-    console.error('Failed to fetch basic data:', e)
-  } finally {
-    loading.value = false
-  }
-}
-
-// 获取使用事件
-const fetchUsageEvents = async () => {
-  if (!sessionToken.value) return
-
-  const currentTab = tabs.find(t => t.key === activeTab.value)
-  if (!currentTab) return
-
+  const seq = ++eventsSeq
   eventsLoading.value = true
   eventsError.value = null
 
   try {
-    const { startTimestamp, endTimestamp } = getDateRange(currentTab.days)
-    const result = await invoke('cursor_get_filtered_usage_events', {
+    let events = []
+    let totalCount = 0
+    // 全部模式（无日期）与范围模式统一分页拉取：接口不传分页时默认只回 100 条
+    const baseParams = {
       sessionToken: sessionToken.value,
-      startDate: String(startTimestamp),
-      endDate: String(endTimestamp),
-      page: 1,
-      pageSize: 1000,
-      teamId: 0
-    })
-    const events = result?.usageEventsDisplay || []
+      teamId: 0,
+      pageSize: PAGE_SIZE
+    }
+    if (rangeStartTs.value !== null) {
+      baseParams.startDate = String(rangeStartTs.value)
+      baseParams.endDate = String(rangeEndTs.value)
+    }
+    let page = 1
+    while (page <= MAX_PAGES) {
+      const result = await invoke('cursor_get_filtered_usage_events', { ...baseParams, page })
+      if (seq !== eventsSeq) return
+      const chunk = result?.usageEventsDisplay || []
+      events = events.concat(chunk)
+      totalCount = result?.totalUsageEventsCount || events.length
+      // 服务端可能按更小的页大小截断，只要还没拿满就继续翻页
+      if (!chunk.length || events.length >= totalCount) break
+      page++
+    }
+    if (seq !== eventsSeq) return
     usageEvents.value = events
+    eventsTotalCount.value = Math.max(totalCount, events.length)
   } catch (e) {
+    if (seq !== eventsSeq) return
     eventsError.value = e.toString()
     console.error('Failed to fetch usage events:', e)
   } finally {
-    eventsLoading.value = false
+    if (seq === eventsSeq) eventsLoading.value = false
   }
 }
 
-const switchTab = (tabKey) => {
-  activeTab.value = tabKey
-  if (tabKey === 'charts') {
-    fetchChartEvents()
-  } else {
-    fetchUsageEvents()
+const refetchRangeData = () => {
+  fetchEvents()
+}
+
+// --- 模型筛选与合计 ---
+
+const modelOptions = computed(() => {
+  const models = new Set()
+  for (const event of usageEvents.value) {
+    models.add(event.model || 'Unknown')
   }
-}
+  return [...models].sort((a, b) => a.localeCompare(b))
+})
 
-// 获取图表数据 (优先使用账期范围，否则回退30天)
-const getChartDateRange = () => {
-  const usage = individualUsage.value
-  if (usage?.billingCycleStart && usage?.billingCycleEnd) {
-    return {
-      startTimestamp: new Date(usage.billingCycleStart).getTime(),
-      endTimestamp: new Date(usage.billingCycleEnd).getTime()
-    }
+// 切换时间范围后所选模型可能不再存在，自动回退到全部
+watch(modelOptions, (options) => {
+  if (selectedModel.value && !options.includes(selectedModel.value)) {
+    selectedModel.value = ''
   }
-  return getDateRange(30)
+})
+
+const filteredEvents = computed(() => {
+  if (!selectedModel.value) return usageEvents.value
+  return usageEvents.value.filter(e => (e.model || 'Unknown') === selectedModel.value)
+})
+
+const displayEvents = computed(() => filteredEvents.value.slice(0, MAX_DISPLAY_ROWS))
+
+const isFreeCreditEvent = (event) => event.kind === FREE_CREDIT_KIND
+
+// 实际计费美分：赠送额度与未计费请求为 0
+const eventChargedCents = (event) => {
+  if (typeof event.chargedCents === 'number') return event.chargedCents
+  // 后端未透传 chargedCents 时的退化处理
+  if (isFreeCreditEvent(event)) return 0
+  return event.tokenUsage?.totalCents || 0
 }
 
-const fetchChartEvents = async () => {
-  if (!sessionToken.value) return
-
-  eventsLoading.value = true
-  eventsError.value = null
-
-  try {
-    const params = {
-      sessionToken: sessionToken.value,
-      teamId: 0
-    }
-    if (chartAllData.value) {
-      // 查全部数据：只传 teamId，不传日期和分页
-    } else {
-      const { startTimestamp, endTimestamp } = getChartDateRange()
-      params.startDate = String(startTimestamp)
-      params.endDate = String(endTimestamp)
-      params.page = 1
-      params.pageSize = 1000
-    }
-    const result = await invoke('cursor_get_filtered_usage_events', params)
-    chartEvents.value = result?.usageEventsDisplay || []
-  } catch (e) {
-    eventsError.value = e.toString()
-    console.error('Failed to fetch chart events:', e)
-  } finally {
-    eventsLoading.value = false
+const eventCostTooltip = (event) => {
+  if (isFreeCreditEvent(event)) return $t('cursorUsage.freeCreditTooltip')
+  const total = event.tokenUsage?.totalCents || 0
+  const charged = eventChargedCents(event)
+  if (Math.abs(charged - total) >= 0.5) {
+    return $t('cursorUsage.partialChargeTooltip', { charged: (charged / 100).toFixed(4) })
   }
+  return ''
 }
 
-const toggleChartAllData = () => {
-  chartAllData.value = !chartAllData.value
-  fetchChartEvents()
+const filteredTotals = computed(() => {
+  const totals = {
+    count: filteredEvents.value.length,
+    models: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+    costCents: 0,
+    chargedCents: 0
+  }
+  const models = new Set()
+  for (const event of filteredEvents.value) {
+    models.add(event.model || 'Unknown')
+    totals.chargedCents += eventChargedCents(event)
+    const usage = event.tokenUsage
+    if (!usage) continue
+    totals.inputTokens += usage.inputTokens || 0
+    totals.outputTokens += usage.outputTokens || 0
+    totals.cacheWriteTokens += usage.cacheWriteTokens || 0
+    totals.cacheReadTokens += usage.cacheReadTokens || 0
+    totals.costCents += usage.totalCents || 0
+  }
+  totals.models = models.size
+  return totals
+})
+
+const formatCostDollars = (cents) => {
+  const dollars = cents / 100
+  return '$' + (Math.abs(dollars) >= 1 ? dollars.toFixed(2) : dollars.toFixed(4))
 }
+
+const totalCostLabel = computed(() => formatCostDollars(filteredTotals.value.costCents))
+const totalChargedLabel = computed(() => formatCostDollars(filteredTotals.value.chargedCents))
+const totalsChargedDiffers = computed(() =>
+  Math.abs(filteredTotals.value.costCents - filteredTotals.value.chargedCents) >= 0.5
+)
+
+// 当前范围内赠送额度抵扣的用量（按 API 标价），来自全部事件，不受模型筛选影响
+const freeCreditCents = computed(() => {
+  let sum = 0
+  for (const event of usageEvents.value) {
+    if (isFreeCreditEvent(event)) sum += event.tokenUsage?.totalCents || 0
+  }
+  return sum
+})
+
+// 汇总卡片：由当前范围内全部事件（不受模型筛选影响）推导，费用为实际计费口径
+const summaryTotals = computed(() => {
+  const totals = { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, chargedCents: 0 }
+  for (const event of usageEvents.value) {
+    totals.chargedCents += eventChargedCents(event)
+    const usage = event.tokenUsage
+    if (!usage) continue
+    totals.inputTokens += usage.inputTokens || 0
+    totals.outputTokens += usage.outputTokens || 0
+    totals.cacheWriteTokens += usage.cacheWriteTokens || 0
+    totals.cacheReadTokens += usage.cacheReadTokens || 0
+  }
+  return totals
+})
+
+const fetchCapped = computed(() => eventsTotalCount.value > usageEvents.value.length)
+const displayTruncated = computed(() => filteredEvents.value.length > displayEvents.value.length)
+
+const truncatedHint = computed(() => {
+  if (fetchCapped.value) {
+    return $t('cursorUsage.eventsFetchCapped', {
+      loaded: usageEvents.value.length,
+      total: eventsTotalCount.value
+    })
+  }
+  return $t('cursorUsage.eventsTruncated', {
+    shown: displayEvents.value.length,
+    total: filteredEvents.value.length
+  })
+})
+
+// 范围不超过 2 天时图表按小时聚合
+const chartGranularity = computed(() => {
+  if (rangeStartTs.value === null || rangeEndTs.value === null) return 'day'
+  return rangeEndTs.value - rangeStartTs.value <= 2 * 24 * 60 * 60 * 1000 ? 'hour' : 'day'
+})
+
+// --- 摘要刷新 ---
 
 // 刷新用量摘要（更新账期和配额）
 const fetchUsageSummary = async () => {
@@ -484,14 +700,9 @@ const fetchUsageSummary = async () => {
 }
 
 const refresh = async () => {
-  if (loading.value || eventsLoading.value) return
+  if (eventsLoading.value) return
   await fetchUsageSummary()
-  fetchBasicData()
-  if (isChartView.value) {
-    fetchChartEvents()
-  } else {
-    fetchUsageEvents()
-  }
+  refetchRangeData()
 }
 
 const handleClose = () => {
@@ -499,8 +710,6 @@ const handleClose = () => {
 }
 
 onMounted(() => {
-  fetchBasicData()
-  fetchUsageEvents()
+  applyPreset(rangePreset.value)
 })
 </script>
-

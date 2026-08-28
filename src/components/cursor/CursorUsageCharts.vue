@@ -106,6 +106,11 @@ const props = defineProps({
   usageEvents: {
     type: Array,
     default: () => []
+  },
+  // 'day' 按天聚合，'hour' 按小时聚合（短时间范围时更有参考价值）
+  granularity: {
+    type: String,
+    default: 'day'
   }
 })
 
@@ -179,8 +184,18 @@ const formatDateKey = (date) => {
   return `${y}-${m}-${d}`
 }
 
-const formatDateLabel = (dateKey) => {
-  return dateKey.slice(5) // MM-DD
+// 聚合 key：天粒度 YYYY-MM-DD，小时粒度 YYYY-MM-DD HH（字典序即时间序）
+const groupKey = (date) => {
+  const base = formatDateKey(date)
+  if (props.granularity !== 'hour') return base
+  return `${base} ${String(date.getHours()).padStart(2, '0')}`
+}
+
+const formatDateLabel = (key) => {
+  if (props.granularity === 'hour') {
+    return `${key.slice(5, 10)} ${key.slice(11)}:00` // MM-DD HH:00
+  }
+  return key.slice(5) // MM-DD
 }
 
 const formatNumber = (v) => {
@@ -199,7 +214,7 @@ const trendData = computed(() => {
   for (const event of props.usageEvents) {
     const date = parseTimestamp(event.timestamp)
     if (!date) continue
-    const key = formatDateKey(date)
+    const key = groupKey(date)
     if (!grouped[key]) grouped[key] = { cost: 0, tokens: 0 }
     if (event.tokenUsage) {
       grouped[key].cost += (event.tokenUsage.totalCents || 0) / 100
@@ -225,7 +240,7 @@ const trendByModelData = computed(() => {
   for (const event of props.usageEvents) {
     const date = parseTimestamp(event.timestamp)
     if (!date) continue
-    const key = formatDateKey(date)
+    const key = groupKey(date)
     const model = event.model || 'Unknown'
     modelSet.add(model)
     if (!dayModelMap[key]) dayModelMap[key] = {}
@@ -586,4 +601,5 @@ onUnmounted(() => {
 watch(currentTheme, () => { chartKey.value++ })
 watch(trendMetric, () => { chartKey.value++ })
 watch(trendByModel, () => { chartKey.value++ })
+watch(() => props.granularity, () => { chartKey.value++ })
 </script>
