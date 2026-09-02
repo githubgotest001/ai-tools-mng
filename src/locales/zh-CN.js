@@ -42,7 +42,15 @@ export default {
     copySuccess: '复制成功',
     copyFailed: '复制失败',
     copyLink: '复制链接',
-    actions: '操作'
+    actions: '操作',
+    more: '更多',
+    success: '成功',
+    failed: '失败',
+    noTag: '无标签',
+    tagFilterInclude: '包含',
+    tagFilterExclude: '排除',
+    switchToIncludeMode: '切换到包含模式',
+    switchToExcludeMode: '切换到排除模式'
   },
   app: {
     title: 'AI Tools Manager',
@@ -1917,19 +1925,46 @@ export default {
       grokBotResets: '重置 {date}',
       billingCycleShort: '账期',
       quotaLabel: '配额',
-      searchPlaceholder: '搜索邮箱...',
+      searchPlaceholder: '搜索邮箱 / 标签 / 套餐...',
       sortByQuota: '按配额排序',
+      sortByApiQuota: '按 API 额度',
+      sortByApiQuotaHint: '按 Other Models（API）池剩余比例排序，这个池通常最先耗尽；没有配额数据的账号排在最后',
       sortByMembership: '按订阅计划',
       sortByMembershipHint: '按套餐等级排序（free < pro < pro plus < ultra），升序低等级在前；未识别的计划排在最后，同等级按邮箱字典序',
       sortByBillingCycleEnd: '按账期到期',
       sortByBillingCycleEndHint: '按账期到期时间排序，升序=先到期的在前；无账期数据的账号排在最后',
       batchRefresh: '批量刷新',
+      batchRefreshResult: '{success} 成功，{fail} 失败',
+      batchRefreshExpired: '其中 {count} 个 Session 已失效',
+      switchLocked: '正在切换其它账号，请稍候',
       allAccountsMarkedForSync: '已将 {count} 个账号标记为待同步',
+      credential: {
+        access: 'Access',
+        session: 'Session',
+        none: '无',
+        expired: '已过期',
+        expiringIn: '{remaining} 后过期',
+        expiredBadge: '{kind} 已过期',
+        expiringBadge: '{remaining} 后过期',
+        tooltipLine: '{kind}：{date} · {state}',
+        tooltipLineShort: '{kind}：{date}',
+        hint: 'Session Token 供拉取配额与用量使用，也是判定账号是否过期的依据；Access Token 可用 Session 重新换取，仅在没有 Session 的账号上才作为依据。过期后需重新获取 Token 覆盖导入'
+      },
+      autoUpdate: {
+        disable: '禁用自动更新',
+        disabled: '自动更新已禁用',
+        enableHint: '点击启用自动更新',
+        disableHint: '点击禁用自动更新',
+        enabledToast: '自动更新已启用',
+        disabledToast: '自动更新已禁用'
+      },
       filter: {
         all: '全部',
         available: '可用',
         low: '配额低',
         forbidden: '已禁用',
+        credentialIssue: '凭证异常',
+        credentialIssueHint: 'Session 已过期或 7 天内到期、刷新配额时被 Cursor 拒绝的账号；没有 Session 的账号按 Access Token 判断',
         membershipType: '会员类型（可多选）',
         membershipMultiSelectHint: '可多选，选中的类型任一命中即显示；点「全部」清空筛选'
       },
@@ -1982,6 +2017,10 @@ export default {
         accountExists: '该邮箱账号已存在',
         accountExistsHint: '邮箱 {email} 已存在，是否更新认证信息？',
         overwrite: '覆盖'
+      },
+      batchDeleteConfirm: {
+        title: '确认批量删除',
+        message: '确定要删除选中的 {count} 个 Cursor 账号吗？此操作无法撤销。'
       },
       importDialog: {
         title: '导入账号',
@@ -2041,6 +2080,7 @@ export default {
         sessionExpired: 'Session 已失效，请重新获取 Token（套餐信息保持不变）',
         addSuccess: '账号添加成功',
         addFailed: '添加账号失败: {error}',
+        updateSuccess: '账号凭证已更新',
         deleteConfirm: '确定要删除这个账号吗？',
         deleteSuccess: '账号删除成功',
         deleteFailed: '删除失败: {error}',

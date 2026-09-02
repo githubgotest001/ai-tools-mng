@@ -302,7 +302,8 @@
   .v-tooltip {
     @apply font-mono fixed z-[10000] rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-semibold leading-[1.4] text-text opacity-0 shadow-md transition-opacity max-w-xs;
     pointer-events: none;
-    white-space: normal;
+    /* 保留文案里的换行，多条信息（如两个 token 的到期时间）可以分行展示 */
+    white-space: pre-line;
     word-break: break-word;
   }
 

@@ -42,7 +42,15 @@ export default {
     copySuccess: 'Copied successfully',
     copyFailed: 'Failed to copy',
     copyLink: 'Copy Link',
-    actions: 'Actions'
+    actions: 'Actions',
+    more: 'More',
+    success: 'succeeded',
+    failed: 'failed',
+    noTag: 'No tag',
+    tagFilterInclude: 'Include',
+    tagFilterExclude: 'Exclude',
+    switchToIncludeMode: 'Switch to include mode',
+    switchToExcludeMode: 'Switch to exclude mode'
   },
   app: {
     title: 'AI Tools Manager',
@@ -1924,19 +1932,46 @@ export default {
       grokBotResets: 'Resets {date}',
       billingCycleShort: 'Cycle',
       quotaLabel: 'Quota',
-      searchPlaceholder: 'Search email...',
+      searchPlaceholder: 'Search email / tag / plan...',
       sortByQuota: 'Sort by Quota',
+      sortByApiQuota: 'By API quota',
+      sortByApiQuotaHint: 'Sort by remaining share of the Other Models (API) pool, which usually runs out first. Accounts without quota data go last.',
       sortByMembership: 'By plan',
       sortByMembershipHint: 'Sort by plan tier (free < pro < pro plus < ultra); ascending puts lower tiers first. Unrecognized plans go last, and accounts on the same tier are ordered by email.',
       sortByBillingCycleEnd: 'By cycle end',
       sortByBillingCycleEndHint: 'Sort by billing cycle end date; ascending puts the soonest to renew first. Accounts without cycle data go last.',
       batchRefresh: 'Batch refresh',
+      batchRefreshResult: '{success} succeeded, {fail} failed',
+      batchRefreshExpired: '{count} of them have an expired session',
+      switchLocked: 'Another account is being switched, please wait',
       allAccountsMarkedForSync: 'All {count} accounts marked for sync',
+      credential: {
+        access: 'Access',
+        session: 'Session',
+        none: 'None',
+        expired: 'Expired',
+        expiringIn: 'Expires in {remaining}',
+        expiredBadge: '{kind} expired',
+        expiringBadge: 'Expires in {remaining}',
+        tooltipLine: '{kind}: {date} · {state}',
+        tooltipLineShort: '{kind}: {date}',
+        hint: 'The Session Token fetches quota and usage and decides whether the account counts as expired. The Access Token can be re-derived from the Session, so it only matters for accounts without one. Re-import a fresh token once expired.'
+      },
+      autoUpdate: {
+        disable: 'Disable auto-update',
+        disabled: 'Auto-update disabled',
+        enableHint: 'Click to re-enable auto-update',
+        disableHint: 'Click to disable auto-update',
+        enabledToast: 'Auto-update enabled',
+        disabledToast: 'Auto-update disabled'
+      },
       filter: {
         all: 'All',
         available: 'Available',
         low: 'Low Quota',
         forbidden: 'Forbidden',
+        credentialIssue: 'Token issues',
+        credentialIssueHint: 'Accounts whose Session has expired, expires within 7 days, or was rejected by Cursor on the last quota refresh; accounts without a Session are judged by their Access Token',
         membershipType: 'Plan (multi-select)',
         membershipMultiSelectHint: 'Pick several plans — an account shows if it matches any of them. Click All to clear the filter.'
       },
@@ -1989,6 +2024,10 @@ export default {
         accountExists: 'Account already exists',
         accountExistsHint: 'Email {email} already exists. Update authentication info?',
         overwrite: 'Overwrite'
+      },
+      batchDeleteConfirm: {
+        title: 'Confirm Batch Delete',
+        message: 'Delete the {count} selected Cursor accounts? This action cannot be undone.'
       },
       importDialog: {
         title: 'Import Accounts',
@@ -2048,6 +2087,7 @@ export default {
         sessionExpired: 'Session expired, please re-add the token (plan info left unchanged)',
         addSuccess: 'Account added successfully',
         addFailed: 'Add account failed: {error}',
+        updateSuccess: 'Account credentials updated',
         deleteConfirm: 'Are you sure you want to delete this account?',
         deleteSuccess: 'Account deleted successfully',
         deleteFailed: 'Delete failed: {error}',

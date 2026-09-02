@@ -32,20 +32,18 @@
     <td class="px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[13px] text-text">
       <div class="flex items-center gap-1.5">
         <div class="text-copyable min-w-0" @click.stop="copyEmail" v-tooltip="account.email">
-          <span class="text-copyable__content">{{ showRealEmail ? account.email : maskedEmail }}</span>
+          <span class="text-copyable__content">{{ displayEmail }}</span>
         </div>
-        <span v-if="account.membership_type" class="shrink-0" :class="getMembershipBadgeClass(account.membership_type)">
-          <svg v-if="account.membership_type?.toLowerCase() === 'ultra'" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 3H5L2 9l10 12L22 9l-3-6zM9.62 8l1.5-3h1.76l1.5 3H9.62zM11 10v6.68L5.44 10H11zm2 0h5.56L13 16.68V10zm6.26-2h-2.65l-1.5-3h2.65l1.5 3zM6.24 5h2.65l-1.5 3H4.74l1.5-3z"/>
-          </svg>
-          <svg v-else-if="account.membership_type?.toLowerCase() === 'pro'" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/>
-          </svg>
-          <svg v-else-if="account.membership_type?.toLowerCase() === 'pro plus'" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/>
-          </svg>
-          {{ account.membership_type }}
+        <span v-if="isCurrent" class="badge badge--sm badge--success-tech shrink-0">
+          <span class="status-dot text-success"></span>
+          {{ $t('platform.cursor.status.current') }}
         </span>
+        <MembershipBadge
+          v-if="account.membership_type"
+          class="shrink-0"
+          :membership-type="account.membership_type"
+          :badge-class="getMembershipBadgeClass(account.membership_type)"
+        />
         <span
           v-if="sessionInvalid"
           class="badge badge--sm badge--danger-tech shrink-0"
@@ -55,6 +53,14 @@
             <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
           </svg>
           {{ $t('platform.cursor.sessionInvalid') }}
+        </span>
+        <span
+          v-else-if="credentialBadge"
+          class="badge badge--sm shrink-0"
+          :class="credentialBadge.variant === 'danger' ? 'badge--danger-tech' : 'badge--warning-tech'"
+          v-tooltip="credentialTooltip"
+        >
+          {{ credentialBadge.text }}
         </span>
       </div>
     </td>
@@ -76,16 +82,16 @@
       <span v-else class="text-text-muted/50">-</span>
     </td>
 
-    <!-- 过期时间（合并显示） -->
+    <!-- 过期时间：按剩余时长着色，过期前 7 天转黄、过期转红 -->
     <td class="w-[105px] px-2.5 py-3.5 border-b border-border/50 align-top whitespace-nowrap text-[12px] text-text-muted">
-      <div class="flex flex-col gap-0.5">
-        <div class="flex items-center gap-1" v-tooltip="$t('platform.cursor.accessTokenExpiry')">
+      <div class="flex flex-col gap-0.5 tabular-nums">
+        <div class="flex items-center gap-1" v-tooltip="expiryTooltip('access', accessExpiry)">
           <span class="text-text-muted/60">A:</span>
-          <span>{{ account.token?.expiry_timestamp ? formatDate(account.token.expiry_timestamp) : '-' }}</span>
+          <span :class="accessExpiry.textClass">{{ accessExpiry.date }}</span>
         </div>
-        <div class="flex items-center gap-1" v-tooltip="$t('platform.cursor.sessionExpiry')">
+        <div class="flex items-center gap-1" v-tooltip="expiryTooltip('session', sessionExpiry)">
           <span class="text-text-muted/60">S:</span>
-          <span>{{ account.token?.session_expiry_timestamp ? formatDate(account.token.session_expiry_timestamp) : '-' }}</span>
+          <span :class="sessionExpiry.textClass">{{ sessionExpiry.date }}</span>
         </div>
       </div>
     </td>
@@ -113,11 +119,24 @@
           v-if="!isCurrent"
           @click.stop="$emit('switch', account.id)"
           class="btn btn--ghost btn--icon-sm"
-          :disabled="isSwitching"
-          v-tooltip="$t('platform.cursor.switch')"
+          :disabled="isSwitching || switchLocked"
+          v-tooltip="switchLocked && !isSwitching ? $t('platform.cursor.switchLocked') : $t('platform.cursor.switch')"
         >
           <svg v-if="!isSwitching" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z" />
+          </svg>
+          <span v-else class="btn-spinner btn-spinner--xs text-accent" aria-hidden="true"></span>
+        </button>
+
+        <button
+          v-if="hasSessionToken"
+          @click.stop="$emit('refresh-quota', account.id)"
+          class="btn btn--ghost btn--icon-sm"
+          :disabled="isRefreshing"
+          v-tooltip="$t('platform.cursor.refreshQuota')"
+        >
+          <svg v-if="!isRefreshing" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
           </svg>
           <span v-else class="btn-spinner btn-spinner--xs text-accent" aria-hidden="true"></span>
         </button>
@@ -131,51 +150,11 @@
             </button>
           </template>
           <template #default="{ close }">
-            <button @click="handleMenuClick('copyAccessToken', close)" class="dropdown-item">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-              </svg>
-              <span>{{ $t('accountCard.copyAccessToken') }}</span>
-            </button>
-            <button
-              v-if="hasSessionToken"
-              @click="handleMenuClick('copySessionToken', close)"
-              class="dropdown-item"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-              </svg>
-              <span>{{ $t('accountCard.copySessionToken') }}</span>
-            </button>
-            <button
-              v-if="hasSessionToken"
-              @click="handleMenuClick('activeSessions', close)"
-              class="dropdown-item"
-              v-tooltip="$t('cursorSessions.entryHint')"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M4 6h16v10H4V6zm0-2c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h5v2h6v-2h5c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4z"/>
-              </svg>
-              <span>{{ $t('cursorSessions.entry') }}</span>
-            </button>
-            <button @click="handleMenuClick('generateMachineId', close)" class="dropdown-item">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-              </svg>
-              <span>{{ $t('accountCard.generateAndBindMachineId') }}</span>
-            </button>
-            <button @click="handleMenuClick('export', close)" class="dropdown-item">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-              </svg>
-              <span>{{ $t('accountCard.export') }}</span>
-            </button>
-            <button @click="handleMenuClick('delete', close)" class="dropdown-item text-danger hover:bg-danger/10">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-              </svg>
-              <span>{{ $t('common.delete') }}</span>
-            </button>
+            <CursorAccountMenu
+              :has-session-token="hasSessionToken"
+              :is-generating-machine-id="isGeneratingMachineId"
+              @select="(type) => handleMenuClick(type, close)"
+            />
           </template>
         </FloatingDropdown>
       </div>
@@ -216,41 +195,48 @@ import TagBadges from '../common/TagBadges.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
 import CursorUsageModal from './CursorUsageModal.vue'
 import CursorSessionsModal from './CursorSessionsModal.vue'
+import CursorAccountMenu from './CursorAccountMenu.vue'
+import MembershipBadge from './MembershipBadge.vue'
 import { useAccountTags } from '../../composables/useAccountTags'
 import { useCursorQuota } from '../../composables/useCursorQuota'
-import { isCursorSessionInvalid } from '../../utils/cursorUsage'
+import { useCursorAccount } from '../../composables/useCursorAccount'
 import { MAX_ACCOUNT_TAGS } from '../../utils/accountTags'
 
 const { t: $t } = useI18n()
-
-// 订阅计划徽章样式
-const getMembershipBadgeClass = (type) => {
-  const base = 'badge badge--sm uppercase'
-  switch (type?.toLowerCase()) {
-    case 'ultra':
-      return `${base} bg-gradient-to-r from-rose-400 to-pink-500 text-white border-pink-500/50 shadow-sm shadow-pink-500/30`
-    case 'pro':
-      return `${base} bg-gradient-to-r from-amber-400 to-amber-500 text-amber-900 border-amber-500/50`
-    case 'pro plus':
-      return `${base} bg-gradient-to-r from-emerald-400 to-teal-500 text-white border-teal-500/50`
-    default:
-      return base
-  }
-}
 
 const props = defineProps({
   account: { type: Object, required: true },
   isCurrent: { type: Boolean, default: false },
   isSwitching: { type: Boolean, default: false },
+  /** 有任一账号正在切换时为 true，所有行的切换按钮一起禁用 */
+  switchLocked: { type: Boolean, default: false },
+  isRefreshing: { type: Boolean, default: false },
   isSelected: { type: Boolean, default: false },
   selectionMode: { type: Boolean, default: false },
   showRealEmail: { type: Boolean, default: true },
   allAccounts: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['switch', 'delete', 'select', 'account-updated', 'account-synced', 'machine-id-generated'])
+const emit = defineEmits(['switch', 'delete', 'select', 'account-updated', 'account-synced', 'machine-id-generated', 'refresh-quota'])
 
-const hasSessionToken = computed(() => !!props.account.token?.workos_cursor_session_token)
+const menuRef = ref(null)
+
+const {
+  showUsageModal,
+  showSessionsModal,
+  isGeneratingMachineId,
+  hasSessionToken,
+  displayEmail,
+  credentialBadge,
+  credentialTooltip,
+  accessExpiry,
+  sessionExpiry,
+  sessionInvalid,
+  sessionInvalidTooltip,
+  getMembershipBadgeClass,
+  copyEmail,
+  handleMenuClick
+} = useCursorAccount(props, emit)
 
 const {
   grokBotResetLabel,
@@ -276,27 +262,16 @@ const quotaBarHint = (item) => {
   return parts.join(' · ')
 }
 
-const menuRef = ref(null)
-const showUsageModal = ref(false)
-const showSessionsModal = ref(false)
-const isGeneratingMachineId = ref(false)
-
-const maskedEmail = computed(() => {
-  const email = props.account.email
-  if (!email || !email.includes('@')) return email
-  return 'hello@cursor.com'
-})
-
-// Session 失效标识：套餐/用量仍是上次成功刷新的数据
-const sessionInvalid = computed(() => isCursorSessionInvalid(props.account))
-
-const sessionInvalidTooltip = computed(() => {
-  const hint = $t('platform.cursor.sessionInvalidHint')
-  const at = props.account.session_invalid_at
-  return at
-    ? `${hint} · ${$t('platform.cursor.sessionInvalidAt', { time: formatDate(at) })}`
-    : hint
-})
+// 列宽只放得下日期，完整时刻与剩余时长放进 tooltip
+const expiryTooltip = (kind, cell) => {
+  const title = kind === 'access'
+    ? $t('platform.cursor.accessTokenExpiry')
+    : $t('platform.cursor.sessionExpiry')
+  if (!cell.dateTime) return `${title} · ${$t('platform.cursor.credential.none')}`
+  return cell.stateLabel
+    ? `${title} · ${cell.dateTime} · ${cell.stateLabel}`
+    : `${title} · ${cell.dateTime}`
+}
 
 // 标签相关
 const {
@@ -308,173 +283,9 @@ const {
   handleTagClear
 } = useAccountTags(props, emit)
 
-// 状态
-const statusClass = computed(() => {
-  if (props.isCurrent) return 'current'
-  if (props.account.disabled) return 'disabled'
-  return 'available'
-})
-
-const statusBadgeClass = computed(() => {
-  switch (statusClass.value) {
-    case 'current': return 'badge--accent-tech'
-    case 'disabled': return 'badge--danger-tech'
-    case 'available': return 'badge--success-tech'
-    default: return ''
-  }
-})
-
-const statusDotClass = computed(() => {
-  switch (statusClass.value) {
-    case 'current': return 'text-accent'
-    case 'disabled': return 'text-danger'
-    case 'available': return 'text-success'
-    default: return ''
-  }
-})
-
-const statusLabel = computed(() => {
-  if (props.isCurrent) return $t('platform.cursor.status.current')
-  if (props.account.disabled) return $t('platform.cursor.status.disabled')
-  return $t('platform.cursor.status.available')
-})
-
-const formatDate = (timestamp) => {
-  if (!timestamp) return '-'
-  const date = new Date(timestamp * 1000)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  })
-}
-
 const toggleSelection = () => emit('select', props.account.id)
 
 const handleRowClick = () => {
   if (props.selectionMode) toggleSelection()
-}
-
-const copyEmail = async () => {
-  try {
-    await navigator.clipboard.writeText(props.account.email)
-    window.$notify?.success($t('messages.emailNoteCopied'))
-  } catch (err) {
-    window.$notify?.error($t('messages.copyEmailNoteFailed'))
-  }
-}
-
-// 菜单操作
-const handleMenuClick = async (type, close) => {
-  close?.()
-  switch (type) {
-    case 'copyAccessToken':
-      await copyAccessToken()
-      break
-    case 'copySessionToken':
-      await copySessionToken()
-      break
-    case 'activeSessions':
-      showSessionsModal.value = true
-      break
-    case 'generateMachineId':
-      await generateAndBindMachineId()
-      break
-    case 'export':
-      await exportAccount()
-      break
-    case 'delete':
-      emit('delete', props.account.id)
-      break
-  }
-}
-
-const copyAccessToken = async () => {
-  try {
-    const accessToken = props.account.token?.access_token
-    if (!accessToken) {
-      window.$notify?.error($t('messages.noAccessToken'))
-      return
-    }
-    await navigator.clipboard.writeText(accessToken)
-    window.$notify?.success($t('messages.accessTokenCopied'))
-  } catch (err) {
-    window.$notify?.error($t('messages.copyFailed'))
-  }
-}
-
-const copySessionToken = async () => {
-  try {
-    const sessionToken = props.account.token?.workos_cursor_session_token
-    if (!sessionToken) {
-      window.$notify?.error($t('messages.noSessionToken'))
-      return
-    }
-    await navigator.clipboard.writeText(sessionToken)
-    window.$notify?.success($t('messages.sessionTokenCopied'))
-  } catch (err) {
-    window.$notify?.error($t('messages.copyFailed'))
-  }
-}
-
-const generateAndBindMachineId = async () => {
-  if (isGeneratingMachineId.value) return
-
-  isGeneratingMachineId.value = true
-  try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const result = await invoke('cursor_generate_and_bind_machine_id', {
-      accountId: props.account.id
-    })
-    window.$notify?.success(result.message || $t('platform.cursor.messages.machineIdGenerated'))
-    emit('machine-id-generated', props.account.id)
-  } catch (err) {
-    console.error('Generate machine ID error:', err)
-    window.$notify?.error(err?.message || err || $t('platform.cursor.messages.machineIdGenerateFailed'))
-  } finally {
-    isGeneratingMachineId.value = false
-  }
-}
-
-const exportAccount = async () => {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const { save } = await import('@tauri-apps/plugin-dialog')
-    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
-
-    // 获取导出数据
-    const jsonData = await invoke('cursor_export_accounts', {
-      accountIds: [props.account.id]
-    })
-
-    // 生成默认文件名
-    const defaultFileName = `cursor_account_${props.account.email.replace(/[^a-zA-Z0-9]/g, '_')}.json`
-
-    // 让用户选择保存位置
-    const filePath = await save({
-      defaultPath: defaultFileName,
-      filters: [
-        {
-          name: 'JSON',
-          extensions: ['json']
-        }
-      ]
-    })
-
-    if (!filePath) {
-      return // 用户取消
-    }
-
-    // 写入文件
-    await writeTextFile(filePath, jsonData)
-
-    window.$notify?.success($t('platform.cursor.messages.exportSuccess'))
-  } catch (err) {
-    console.error('Export account error:', err)
-    if (err?.message?.includes('Cancelled') || err?.code === 'Cancelled') {
-      return // 用户取消，不显示错误
-    }
-    window.$notify?.error(err?.message || err || $t('platform.cursor.messages.exportFailed'))
-  }
 }
 </script>

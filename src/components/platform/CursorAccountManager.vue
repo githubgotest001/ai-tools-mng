@@ -59,7 +59,7 @@
             </svg>
             <span v-else class="btn-spinner text-accent" aria-hidden="true"></span>
           </button>
-          <button class="btn btn--icon btn--ghost" @click="setToolbarMode('more')" v-tooltip="'更多'">
+          <button class="btn btn--icon btn--ghost" @click="setToolbarMode('more')" v-tooltip="$t('common.more')">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 7a2 2 0 110-4 2 2 0 010 4zm0 7a2 2 0 110-4 2 2 0 010 4zm0 7a2 2 0 110-4 2 2 0 010 4z"/>
             </svg>
@@ -120,7 +120,8 @@
             :account="account"
             :is-current="account.id === currentAccountId"
             :is-switching="switchingAccountId === account.id"
-            :is-refreshing="refreshingAccountId === account.id"
+            :switch-locked="switchingAccountId !== null"
+            :is-refreshing="refreshingAccountIds.has(account.id)"
             :is-selected="selectedAccountIds.has(account.id)"
             :selection-mode="isSelectionMode"
             :show-real-email="showRealEmail"
@@ -167,6 +168,8 @@
                 :account="account"
                 :is-current="account.id === currentAccountId"
                 :is-switching="switchingAccountId === account.id"
+                :switch-locked="switchingAccountId !== null"
+                :is-refreshing="refreshingAccountIds.has(account.id)"
                 :is-selected="selectedAccountIds.has(account.id)"
                 :selection-mode="isSelectionMode"
                 :show-real-email="showRealEmail"
@@ -177,6 +180,7 @@
                 @account-updated="handleAccountUpdated"
                 @account-synced="handleAccountSynced"
                 @machine-id-generated="handleMachineIdGenerated"
+                @refresh-quota="handleRefreshQuota"
               />
             </tbody>
           </table>
@@ -247,6 +251,14 @@
             >
               <span>{{ $t('platform.cursor.filter.forbidden') }}</span>
             </button>
+            <button
+              :class="['btn btn--sm', selectedStatusFilter === 'credentialIssue' ? 'btn--primary' : 'btn--secondary']"
+              @click="selectedStatusFilter = 'credentialIssue'"
+              v-tooltip="$t('platform.cursor.filter.credentialIssueHint')"
+            >
+              <span>{{ $t('platform.cursor.filter.credentialIssue') }}</span>
+              <span v-if="credentialIssueCount > 0" class="ml-1 opacity-70">({{ credentialIssueCount }})</span>
+            </button>
           </div>
         </div>
         <!-- 会员类型筛选（多选） -->
@@ -281,12 +293,12 @@
             <button
               :class="['btn btn--sm', 'btn--secondary']"
               @click="toggleTagFilterMode"
-              v-tooltip="tagFilterMode === 'include' ? '切换到排除模式' : '切换到包含模式'"
+              v-tooltip="tagFilterMode === 'include' ? $t('common.switchToExcludeMode') : $t('common.switchToIncludeMode')"
               data-toolbar-keep-open
             >
               <svg v-if="tagFilterMode === 'include'" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
               <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-              <span class="ml-1">{{ tagFilterMode === 'include' ? '包含' : '排除' }}</span>
+              <span class="ml-1">{{ tagFilterMode === 'include' ? $t('common.tagFilterInclude') : $t('common.tagFilterExclude') }}</span>
             </button>
             <button
               :class="['btn btn--sm', selectedTags.size === 0 ? 'btn--primary' : 'btn--secondary']"
@@ -308,7 +320,7 @@
               :class="['btn btn--sm', selectedTags.has('__no_tag__') ? 'btn--primary' : 'btn--secondary']"
               @click="toggleTag('__no_tag__')"
             >
-              无标签
+              {{ $t('common.noTag') }}
               <span class="ml-1 opacity-70">({{ noTagCount }})</span>
             </button>
           </div>
@@ -323,26 +335,30 @@
       @close="setToolbarMode('hidden')">
       <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div class="flex flex-col gap-2">
-          <span class="label">排序方向</span>
+          <span class="label">{{ $t('common.sortDirection') }}</span>
           <div class="flex items-center gap-2 flex-wrap">
             <button :class="['btn btn--sm', sortOrder === 'asc' ? 'btn--primary' : 'btn--secondary']" @click="sortOrder = 'asc'">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 14l4-4 4 4H8z" /></svg>
-              <span class="ml-1">升序</span>
+              <span class="ml-1">{{ $t('common.ascending') }}</span>
             </button>
             <button :class="['btn btn--sm', sortOrder === 'desc' ? 'btn--primary' : 'btn--secondary']" @click="sortOrder = 'desc'">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M16 10l-4 4-4-4h8z" /></svg>
-              <span class="ml-1">降序</span>
+              <span class="ml-1">{{ $t('common.descending') }}</span>
             </button>
           </div>
         </div>
         <div class="flex flex-col gap-2">
-          <span class="label">排序字段</span>
+          <span class="label">{{ $t('common.sortBy') }}</span>
           <div class="flex items-center gap-2 flex-wrap">
             <button :class="['btn btn--sm', sortType === 'time' ? 'btn--primary' : 'btn--secondary']" @click="sortType = 'time'">
               {{ $t('common.sortByTime') }}
             </button>
-            <button :class="['btn btn--sm', sortType === 'apiUsage' ? 'btn--primary' : 'btn--secondary']" @click="sortType = 'apiUsage'">
-              按额度
+            <button
+              :class="['btn btn--sm', sortType === 'apiUsage' ? 'btn--primary' : 'btn--secondary']"
+              @click="sortType = 'apiUsage'"
+              v-tooltip="$t('platform.cursor.sortByApiQuotaHint')"
+            >
+              {{ $t('platform.cursor.sortByApiQuota') }}
             </button>
             <button
               :class="['btn btn--sm', sortType === 'membership' ? 'btn--primary' : 'btn--secondary']"
@@ -366,7 +382,7 @@
     <!-- 更多操作工具栏 -->
     <ActionToolbar
       :visible="toolbarMode === 'more'"
-      title="更多"
+      :title="$t('common.more')"
       max-width="800px"
       @close="setToolbarMode('hidden')">
       <div class="flex flex-wrap items-center gap-2">
@@ -390,7 +406,7 @@
           :class="{ 'active': isAutoUpdateDisabled }"
           :disabled="isTogglingAutoUpdate"
           @click="toggleAutoUpdate"
-          v-tooltip="isAutoUpdateDisabled ? '点击启用自动更新' : '点击禁用自动更新'"
+          v-tooltip="isAutoUpdateDisabled ? $t('platform.cursor.autoUpdate.enableHint') : $t('platform.cursor.autoUpdate.disableHint')"
         >
           <span v-if="isTogglingAutoUpdate" class="btn-spinner btn-spinner--sm text-accent"></span>
           <svg v-else-if="isAutoUpdateDisabled" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -399,7 +415,7 @@
           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M21 10.12h-6.78l2.74-2.82c-2.73-2.7-7.15-2.8-9.88-.1-2.73 2.71-2.73 7.08 0 9.79s7.15 2.71 9.88 0C18.32 15.65 19 14.08 19 12.1h2c0 1.98-.88 4.55-2.64 6.29-3.51 3.48-9.21 3.48-12.72 0-3.5-3.47-3.5-9.11 0-12.58 3.51-3.47 9.14-3.49 12.65 0L21 3v7.12z"/>
           </svg>
-          <span>{{ isAutoUpdateDisabled ? '自动更新已禁用' : '禁用自动更新' }}</span>
+          <span>{{ isAutoUpdateDisabled ? $t('platform.cursor.autoUpdate.disabled') : $t('platform.cursor.autoUpdate.disable') }}</span>
         </button>
         <!-- 自定义 Cursor 路径按钮 -->
         <button
@@ -475,7 +491,7 @@
       :existing-accounts="accounts"
       @close="showAddDialog = false"
       @added="handleAccountAdded"
-      @updated="handleAccountAdded"
+      @updated="handleAccountCredentialsUpdated"
     />
 
     <!-- Import Accounts Dialog -->
@@ -525,7 +541,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, provide, watch, nextTick } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
 import AccountCard from '../cursor/AccountCard.vue'
@@ -542,6 +558,7 @@ import SyncQueueModal from '../common/SyncQueueModal.vue'
 import CustomPathDialog from '../common/CustomPathDialog.vue'
 import TagEditorModal from '../token/TagEditorModal.vue'
 import { useStorageSync } from '@/composables/useStorageSync'
+import { oneOf, usePersistedState } from '@/composables/usePersistedState'
 import {
   applyCursorUsageSummary,
   isCursorSessionExpiredError,
@@ -553,6 +570,7 @@ import {
   matchesMembershipTypes,
   membershipTypeKey
 } from '@/utils/cursorSort'
+import { credentialHealth, runWithConcurrency } from '@/utils/cursorToken'
 import {
   MAX_ACCOUNT_TAGS,
   accountHasAnyTag,
@@ -584,7 +602,15 @@ const pendingSwitchAccount = ref(null) // 待切换的账号（用于机器码�
 const isLoading = ref(false)
 const isRefreshing = ref(false)
 const switchingAccountId = ref(null)
-const refreshingAccountId = ref(null)
+// 单个刷新与批量并发刷新共用同一个集合，卡片/表格据此显示各自的 spinner
+const refreshingAccountIds = ref(new Set())
+
+// 批量刷新配额的并发度：每个账号要打 3 个请求，过高容易撞 Cursor 的 429
+const QUOTA_REFRESH_CONCURRENCY = 3
+
+// 凭证过期状态按「当前时间」判断；挂载时取一次并每分钟推进，避免每张卡片各自 Date.now()
+const nowSeconds = ref(Math.floor(Date.now() / 1000))
+let nowTimer = null
 
 // 使用存储同步 composable
 const {
@@ -626,29 +652,43 @@ const isTogglingAutoUpdate = ref(false)
 const needsAppManagementPermission = ref(false)
 const isCheckingPermission = ref(false)
 
-// 搜索和筛选
+// 搜索是一次性的，不落盘；筛选与排序偏好都记到 localStorage（见下）
 const searchQuery = ref('')
-const selectedStatusFilter = ref(null)
-const selectedTags = ref(new Set())
-const tagFilterMode = ref('include')
 const toolbarMode = ref('hidden')
 const toolbarSearchInputRef = ref(null)
 
+// Set 型筛选在 localStorage 里存成数组
+const persistedSet = (key) =>
+  usePersistedState(key, new Set(), {
+    serialize: (set) => Array.from(set),
+    deserialize: (raw) => new Set(Array.isArray(raw) ? raw.filter((v) => typeof v === 'string') : [])
+  })
+
+// 筛选偏好：返回平台选择会卸载本组件，落盘后再进来不用重新点一遍
+const STATUS_FILTERS = [null, 'available', 'disabled', 'credentialIssue']
+const selectedStatusFilter = usePersistedState('atm-cursor-filter-status', null, {
+  validate: oneOf(STATUS_FILTERS)
+})
 // 会员类型筛选（多选，空集合等价于「全部」）
-const selectedMembershipTypes = ref(new Set())
+const selectedMembershipTypes = persistedSet('atm-cursor-filter-membership')
+const selectedTags = persistedSet('atm-cursor-filter-tags')
+const tagFilterMode = usePersistedState('atm-cursor-filter-tag-mode', 'include', {
+  validate: oneOf(['include', 'exclude'])
+})
 
-// 排序
-const sortType = ref('time')
-const sortOrder = ref('desc')
-
-// 视图模式
-const viewMode = ref('card')
-const showRealEmail = ref(true)
+// 排序 / 视图 / 分页偏好
+const SORT_TYPES = ['time', 'apiUsage', 'membership', 'billingCycleEnd']
+const pageSizeOptions = [10, 20, 50, 100, 200]
+const sortType = usePersistedState('atm-cursor-sort-type', 'time', { validate: oneOf(SORT_TYPES) })
+const sortOrder = usePersistedState('atm-cursor-sort-order', 'desc', { validate: oneOf(['asc', 'desc']) })
+const viewMode = usePersistedState('atm-cursor-view-mode', 'card', { validate: oneOf(['card', 'table']) })
+const showRealEmail = usePersistedState('atm-cursor-show-real-email', true, {
+  validate: (v) => typeof v === 'boolean'
+})
+const pageSize = usePersistedState('atm-cursor-page-size', 20, { validate: oneOf(pageSizeOptions) })
 
 // 分页
 const currentPage = ref(1)
-const pageSize = ref(20)
-const pageSizeOptions = [10, 20, 50, 100, 200]
 
 // 批量操作
 const selectedAccountIds = ref(new Set())
@@ -687,12 +727,28 @@ const membershipStatistics = computed(() => {
   return { ...stats, ...counts }
 })
 
+// Access / Session 任一过期或 7 天内到期，或上次刷新被 401 拒绝
+const hasCredentialIssue = (account) => {
+  const status = credentialHealth(account, nowSeconds.value).status
+  return status === 'expired' || status === 'expiring'
+}
+
+const credentialIssueCount = computed(() => accounts.value.filter(hasCredentialIssue).length)
+
+// 搜索同时匹配邮箱、备注名、标签与套餐：账号一多光靠邮箱记不住
+const matchesSearch = (account, query) => {
+  if (account.email?.toLowerCase().includes(query)) return true
+  if (account.name?.toLowerCase().includes(query)) return true
+  if (membershipTypeKey(account).includes(query)) return true
+  return accountTags(account).some(tag => tag.name?.toLowerCase().includes(query))
+}
+
 const filteredAccounts = computed(() => {
   let result = accounts.value
 
   if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase()
-    result = result.filter(a => a.email.toLowerCase().includes(query))
+    const query = searchQuery.value.toLowerCase().trim()
+    result = result.filter(a => matchesSearch(a, query))
   }
 
   if (selectedStatusFilter.value) {
@@ -702,6 +758,9 @@ const filteredAccounts = computed(() => {
       }
       if (selectedStatusFilter.value === 'available') {
         return !account.disabled
+      }
+      if (selectedStatusFilter.value === 'credentialIssue') {
+        return hasCredentialIssue(account)
       }
       return true
     })
@@ -791,6 +850,25 @@ const clearAllFilters = () => {
 }
 
 // 方法
+// 记住的标签 / 会员类型可能已经不存在（标签被改名、账号被删），留着会把列表筛成空
+const pruneStaleFilters = () => {
+  if (accounts.value.length === 0) return
+
+  const knownTags = new Set(allTags.value.map((tag) => tag.toLowerCase()))
+  const keptTags = Array.from(selectedTags.value).filter(
+    (tag) => tag === '__no_tag__' || knownTags.has(tag.toLowerCase())
+  )
+  if (keptTags.length !== selectedTags.value.size) {
+    selectedTags.value = new Set(keptTags)
+  }
+
+  const knownTypes = new Set(Object.keys(membershipStatistics.value).filter((key) => key !== 'total'))
+  const keptTypes = Array.from(selectedMembershipTypes.value).filter((type) => knownTypes.has(type))
+  if (keptTypes.length !== selectedMembershipTypes.value.size) {
+    selectedMembershipTypes.value = new Set(keptTypes)
+  }
+}
+
 const loadAccounts = async () => {
   isLoading.value = true
   try {
@@ -798,6 +876,7 @@ const loadAccounts = async () => {
     const data = await invoke('cursor_list_accounts')
     accounts.value = data.accounts || []
     currentAccountId.value = data.current_account_id || null
+    pruneStaleFilters()
   } catch (error) {
     console.error('Failed to load accounts:', error)
     accounts.value = []
@@ -820,6 +899,12 @@ const hasMachineInfo = (account) => {
 }
 
 const handleSwitch = async (accountId) => {
+  // 切换会关闭 Cursor、改机器码、写 state.vscdb 再拉起，两次并发会把库写乱
+  if (switchingAccountId.value) {
+    window.$notify?.warning($t('platform.cursor.switchLocked'))
+    return
+  }
+
   const account = accounts.value.find(a => a.id === accountId)
   if (!account) return
 
@@ -845,11 +930,13 @@ const handleSwitch = async (accountId) => {
 
 // 执行切换操作
 const performSwitch = async (accountId, useBoundMachineId) => {
+  if (switchingAccountId.value) return
   switchingAccountId.value = accountId
   try {
     await invoke('cursor_switch_account', { accountId, useBoundMachineId })
     await loadAccounts()
     markItemUpsertById(accountId)
+    window.$notify?.success($t('platform.cursor.messages.switchSuccess'))
   } catch (error) {
     console.error('Failed to switch account:', error)
     if (isPermissionError(error)) {
@@ -889,46 +976,76 @@ const persistSessionInvalid = async (account) => {
   }
 }
 
+const setAccountRefreshing = (accountId, refreshing) => {
+  const next = new Set(refreshingAccountIds.value)
+  if (refreshing) next.add(accountId)
+  else next.delete(accountId)
+  refreshingAccountIds.value = next
+}
+
+/**
+ * 拉取并写回单个账号的用量摘要。
+ * 成功返回 `{ ok: true }`；失败返回 `{ ok: false, expired, error }`，
+ * 失败时不写回任何摘要，账号原有 membership_type 保持不变。
+ */
+const refreshAccountQuota = async (account) => {
+  const sessionToken = account.token?.workos_cursor_session_token
+  if (!sessionToken) return { ok: false, expired: false, error: null }
+  setAccountRefreshing(account.id, true)
+  try {
+    const summary = await invoke('cursor_get_usage_summary', {
+      sessionToken,
+      accessToken: account.token?.access_token || null
+    })
+    applyCursorUsageSummary(account, summary)
+    await invoke('cursor_update_account', { account })
+    markItemUpsertById(account.id)
+    return { ok: true }
+  } catch (error) {
+    console.error(`Failed to refresh quota for ${account.email}:`, error)
+    const expired = isCursorSessionExpiredError(error)
+    if (expired) await persistSessionInvalid(account)
+    return { ok: false, expired, error }
+  } finally {
+    setAccountRefreshing(account.id, false)
+  }
+}
+
 const handleBatchRefreshQuota = async () => {
+  if (isRefreshing.value) return
   const pageAccounts = paginatedAccounts.value.filter(a => a.token?.workos_cursor_session_token)
   if (pageAccounts.length === 0) {
     window.$notify?.error($t('platform.cursor.noQuotaData'))
     return
   }
   isRefreshing.value = true
-  let success = 0
-  let fail = 0
-  let expired = 0
-  for (const account of pageAccounts) {
-    try {
-      const summary = await invoke('cursor_get_usage_summary', {
-        sessionToken: account.token.workos_cursor_session_token,
-        accessToken: account.token?.access_token || null
-      })
-      applyCursorUsageSummary(account, summary)
-      await invoke('cursor_update_account', { account })
-      markItemUpsertById(account.id)
-      success++
-    } catch (e) {
-      // 失败的账号整个跳过，保留它原有的套餐与用量
-      console.error(`Failed to refresh quota for ${account.email}:`, e)
-      fail++
-      if (isCursorSessionExpiredError(e)) {
-        expired++
-        await persistSessionInvalid(account)
+  try {
+    const results = await runWithConcurrency(pageAccounts, refreshAccountQuota, QUOTA_REFRESH_CONCURRENCY)
+    let success = 0
+    let fail = 0
+    let expired = 0
+    for (const result of results) {
+      const outcome = result.status === 'fulfilled' ? result.value : { ok: false, expired: false }
+      if (outcome.ok) success++
+      else {
+        fail++
+        if (outcome.expired) expired++
       }
     }
-  }
-  isRefreshing.value = false
-  if (fail === 0) {
-    window.$notify?.success($t('platform.cursor.batchRefreshQuota') + ` (${success}/${pageAccounts.length})`)
-  } else {
-    const expiredHint = expired > 0 ? `, ${expired} ${$t('platform.cursor.messages.sessionExpired')}` : ''
-    window.$notify?.warning(`${success} ${$t('common.success')}, ${fail} ${$t('common.failed')}${expiredHint}`)
+    if (fail === 0) {
+      window.$notify?.success(`${$t('platform.cursor.batchRefreshQuota')} (${success}/${pageAccounts.length})`)
+    } else {
+      const summary = $t('platform.cursor.batchRefreshResult', { success, fail })
+      const expiredHint = expired > 0 ? ` · ${$t('platform.cursor.batchRefreshExpired', { count: expired })}` : ''
+      window.$notify?.warning(`${summary}${expiredHint}`)
+    }
+  } finally {
+    isRefreshing.value = false
   }
 }
 
-const handleAccountAdded = async (account) => {
+// 新增与覆盖走同一段收尾：重新拉列表、标记待同步、有 session 就顺手刷一次配额
+const finishAccountSave = async (account, messageKey) => {
   showAddDialog.value = false
   await loadAccounts()
   if (account?.id) {
@@ -937,8 +1054,13 @@ const handleAccountAdded = async (account) => {
       handleRefreshQuota(account.id)
     }
   }
-  window.$notify?.success($t('platform.cursor.messages.addSuccess'))
+  window.$notify?.success($t(messageKey))
 }
+
+const handleAccountAdded = (account) => finishAccountSave(account, 'platform.cursor.messages.addSuccess')
+
+const handleAccountCredentialsUpdated = (account) =>
+  finishAccountSave(account, 'platform.cursor.messages.updateSuccess')
 
 // 导入账号成功处理
 const handleAccountsImported = async (result) => {
@@ -1057,31 +1179,19 @@ const handleMachineIdGenerated = async (accountId) => {
 const handleRefreshQuota = async (accountId) => {
   const account = accounts.value.find(a => a.id === accountId)
   if (!account) return
-  const sessionToken = account.token?.workos_cursor_session_token
-  if (!sessionToken) {
+  if (!account.token?.workos_cursor_session_token) {
     window.$notify?.error($t('platform.cursor.noQuotaData'))
     return
   }
-  refreshingAccountId.value = accountId
-  try {
-    const summary = await invoke('cursor_get_usage_summary', {
-      sessionToken,
-      accessToken: account.token?.access_token || null
-    })
-    applyCursorUsageSummary(account, summary)
-    await invoke('cursor_update_account', { account })
-    markItemUpsertById(accountId)
-  } catch (e) {
-    // 失败时不写回任何摘要，账号原有 membership_type 保持不变
-    console.error('Failed to refresh quota:', e)
-    if (isCursorSessionExpiredError(e)) {
-      await persistSessionInvalid(account)
-      window.$notify?.error($t('platform.cursor.messages.sessionExpired'))
-    } else {
-      window.$notify?.error($t('platform.cursor.messages.refreshFailed', { error: e?.message || e }))
-    }
-  } finally {
-    refreshingAccountId.value = null
+  if (refreshingAccountIds.value.has(accountId)) return
+
+  const result = await refreshAccountQuota(account)
+  if (result.ok) return
+  if (result.expired) {
+    window.$notify?.error($t('platform.cursor.messages.sessionExpired'))
+  } else {
+    const error = result.error
+    window.$notify?.error($t('platform.cursor.messages.refreshFailed', { error: error?.message || error }))
   }
 }
 
@@ -1171,6 +1281,16 @@ const handleBatchTagClear = async () => {
 const handleBatchDelete = async () => {
   if (selectedAccountIds.value.size === 0) return
   const ids = Array.from(selectedAccountIds.value)
+
+  const confirmed = await window.$confirm?.({
+    title: $t('platform.cursor.batchDeleteConfirm.title'),
+    message: $t('platform.cursor.batchDeleteConfirm.message', { count: ids.length }),
+    confirmText: $t('common.delete'),
+    cancelText: $t('common.cancel'),
+    variant: 'danger'
+  })
+  if (!confirmed) return
+
   for (const id of ids) {
     try {
       const account = accounts.value.find(a => a.id === id)
@@ -1312,11 +1432,11 @@ const toggleAutoUpdate = async () => {
     if (isAutoUpdateDisabled.value) {
       await invoke('cursor_enable_auto_update')
       isAutoUpdateDisabled.value = false
-      window.$notify?.success('自动更新已启用')
+      window.$notify?.success($t('platform.cursor.autoUpdate.enabledToast'))
     } else {
       await invoke('cursor_disable_auto_update')
       isAutoUpdateDisabled.value = true
-      window.$notify?.success('自动更新已禁用')
+      window.$notify?.success($t('platform.cursor.autoUpdate.disabledToast'))
     }
   } catch (error) {
     console.error('Failed to toggle auto-update:', error)
@@ -1335,11 +1455,25 @@ const handleCustomPathSaved = (newPath) => {
   customCursorPath.value = newPath
 }
 
+// 卡片 / 表格行通过 inject 拿同一份「当前时间」来算过期状态
+provide('cursorNowSeconds', nowSeconds)
+
 onMounted(async () => {
+  nowTimer = setInterval(() => {
+    nowSeconds.value = Math.floor(Date.now() / 1000)
+  }, 60 * 1000)
+
   await initSync()
   await loadAccounts()
   await loadCustomPath()
   await loadAutoUpdateStatus()
   checkMainJsPermission()
+})
+
+onBeforeUnmount(() => {
+  if (nowTimer) {
+    clearInterval(nowTimer)
+    nowTimer = null
+  }
 })
 </script>
