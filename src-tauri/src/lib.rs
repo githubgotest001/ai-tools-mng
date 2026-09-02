@@ -724,6 +724,7 @@ pub fn run() {
             // Cursor 管理命令
             cursor::cursor_get_user_info_from_session,
             cursor::cursor_refresh_account_tokens,
+            cursor::cursor_refresh_account_access_token,
             cursor::cursor_add_account_with_session,
             cursor::cursor_add_account_with_access_token,
             cursor::cursor_import_accounts,

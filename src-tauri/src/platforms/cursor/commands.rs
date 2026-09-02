@@ -143,17 +143,27 @@ pub async fn cursor_switch_account(
     if should_refresh_token {
         if let Some(session_token) = acc.token.workos_cursor_session_token.clone() {
             let app_clone = app.clone();
-            let mut acc_clone = acc.clone();
+            let refreshed_id = account_id.clone();
             tokio::spawn(async move {
-                if let Ok(token_response) =
+                let Ok(token_response) =
                     auth::get_access_token_from_session(&session_token).await
-                {
-                    acc_clone.token.access_token = token_response.access_token;
-                    if let Some(refresh_token) = token_response.refresh_token {
-                        acc_clone.token.refresh_token = refresh_token;
-                    }
-                    let _ = storage::save_account(&app_clone, &acc_clone).await;
+                else {
+                    return;
+                };
+                // PKCE 轮询最长 20s，期间前端很可能已经刷新配额并写回 individual_usage；
+                // 必须以此刻存储里的账号为基础只改 token 字段，不能拿切换时的快照整体覆盖
+                let Ok(mut latest) = storage::load_account(&app_clone, &refreshed_id).await else {
+                    return;
+                };
+                latest.token.access_token = token_response.access_token.clone();
+                if let Some(refresh_token) = token_response.refresh_token {
+                    latest.token.refresh_token = refresh_token;
                 }
+                if let Some(exp) = parse_jwt_exp(&token_response.access_token) {
+                    latest.token.expiry_timestamp = exp;
+                }
+                latest.updated_at = chrono::Utc::now().timestamp();
+                let _ = storage::save_account(&app_clone, &latest).await;
             });
         }
     }
@@ -367,6 +377,42 @@ pub async fn cursor_refresh_account_tokens(
     // 5. 保存更新后的账号
     storage::save_account(&app, &account).await?;
 
+    Ok(account)
+}
+
+/// 用新的 access token 覆盖已有账号的凭证（Access Token 添加方式的「覆盖」分支）。
+///
+/// 与 `cursor_add_account_with_access_token` 走同一套校验：先拿 Stripe 订阅确认 token 可用，
+/// 再写回 access/refresh/expiry 与套餐。原有的 session token 与用量摘要保持不变——
+/// 它们属于同一个邮箱，换 access token 不影响其有效性。
+#[tauri::command]
+pub async fn cursor_refresh_account_access_token(
+    app: AppHandle,
+    account_id: String,
+    access_token: String,
+) -> Result<Account, String> {
+    let access_token = access_token.trim().to_string();
+    if access_token.is_empty() {
+        return Err("Access token is required".to_string());
+    }
+
+    let mut account = storage::load_account(&app, &account_id).await?;
+
+    let profile = auth::get_stripe_profile(&access_token).await?;
+    let membership = profile
+        .individual_membership_type
+        .or(profile.membership_type);
+
+    account.token.expiry_timestamp =
+        parse_jwt_exp(&access_token).unwrap_or_else(|| chrono::Utc::now().timestamp() + 86400 * 60);
+    account.token.access_token = access_token.clone();
+    account.token.refresh_token = access_token;
+    if membership.is_some() {
+        account.membership_type = membership;
+    }
+    account.updated_at = chrono::Utc::now().timestamp();
+
+    storage::save_account(&app, &account).await?;
     Ok(account)
 }
 

@@ -148,7 +148,8 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'added'])
+// `updated` 对应覆盖已有账号，父组件据此区分「新增」与「已更新」的提示文案
+const emit = defineEmits(['close', 'added', 'updated'])
 
 const activeTab = ref('session')
 const tabs = computed(() => [
@@ -237,17 +238,20 @@ const handleAddWithSession = async () => {
 }
 
 const handleAddWithAccessToken = async () => {
+  // 邮箱由用户手填，必须在调后端之前判重，否则会静默多出一个同邮箱账号
+  const existing = checkEmailExists(accessTokenEmail.value)
+  if (existing) {
+    existingAccountId.value = existing.id
+    confirmEmail.value = existing.email
+    showConfirmDialog.value = true
+    isLoading.value = false
+    return
+  }
+
   const account = await invoke('cursor_add_account_with_access_token', {
     email: accessTokenEmail.value.trim(),
     accessToken: accessToken.value.trim()
   })
-
-  const existing = checkEmailExists(account.email)
-  if (existing) {
-    // 后端已保存，但前端检测到重复，这里直接 emit 让列表刷新
-    // 因为 access token 方式后端会直接保存，不做覆盖确认
-  }
-
   emit('added', account)
 }
 
@@ -266,11 +270,17 @@ const handleConfirmAdd = async () => {
 
 const confirmAddAccount = async () => {
   if (existingAccountId.value) {
-    const account = await invoke('cursor_refresh_account_tokens', {
-      accountId: existingAccountId.value,
-      sessionToken: sessionToken.value.trim()
-    })
-    emit('added', account)
+    // 两种添加方式的「覆盖」分别走各自的后端刷新命令，都会保留原账号的标签、机器码与用量
+    const account = activeTab.value === 'session'
+      ? await invoke('cursor_refresh_account_tokens', {
+          accountId: existingAccountId.value,
+          sessionToken: sessionToken.value.trim()
+        })
+      : await invoke('cursor_refresh_account_access_token', {
+          accountId: existingAccountId.value,
+          accessToken: accessToken.value.trim()
+        })
+    emit('updated', account)
   } else {
     const account = await invoke('cursor_add_account_with_session', {
       sessionToken: sessionToken.value.trim()
