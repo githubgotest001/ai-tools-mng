@@ -2062,6 +2062,30 @@ export default {
         title: 'Confirm Account Switch',
         message: 'Switch to account "{email}"? This will overwrite the account Cursor is currently signed in with.'
       },
+      seamlessSwitch: {
+        toggle: 'Seamless switch (no restart)',
+        tooltipOn: 'Seamless switch (no restart): on. Switches the account inside the running Cursor and falls back to a restart switch when unsupported. Machine IDs are not changed in this mode.',
+        tooltipOff: 'Seamless switch (no restart): off. Cursor is closed and restarted, and machine IDs are handled as selected.',
+        enabledToast: 'Seamless switch (no restart) enabled',
+        disabledToast: 'Seamless switch disabled, restart switch will be used',
+        confirmMessage: 'Switch to account "{email}"? While Cursor is running the sign-in is switched in place without restarting; if this Cursor version does not support it, a restart switch is used automatically.',
+        success: 'Switched seamlessly, no Cursor restart needed',
+        directSuccess: 'Cursor was not running: sign-in written and Cursor started',
+        fallbackUsed: 'Seamless switch did not take effect, completed with a restart switch instead. Reason: {reason}'
+      },
+      switchProgress: {
+        preparing: 'Preparing account...',
+        token: 'Checking account token...',
+        close: 'Closing Cursor...',
+        machine: 'Updating machine IDs...',
+        write: 'Writing sign-in data...',
+        launch: 'Starting Cursor...',
+        detect: 'Detecting Cursor version...',
+        deeplink: 'Asking Cursor to switch account...',
+        verify: 'Confirming Cursor has switched...',
+        fallback: 'Seamless switch did not take effect, falling back to restart switch...',
+        done: 'Switch finished'
+      },
       deleteConfirm: {
         title: 'Confirm Delete',
         message: 'Delete Cursor account "{email}"? This action cannot be undone.'
@@ -2073,7 +2097,8 @@ export default {
         openSettings: 'Open System Settings',
         recheck: 'Recheck',
         granted: 'Permission granted',
-        operationFailed: 'Operation failed: missing App Management permission. Please grant it in "System Settings > Privacy & Security > App Management" and try again. After enabling it, recheck or restart the app.'
+        operationFailed: 'Operation failed: missing App Management permission. Please grant it in "System Settings > Privacy & Security > App Management" and try again. After enabling it, recheck or restart the app.',
+        windowsOperationFailed: 'Operation failed: access denied. Cursor may be installed in a protected folder such as Program Files, or the file is in use. Run this app as administrator, or fully quit Cursor and try again.'
       },
       messages: {
         machineIdGenerated: 'Machine ID generated and bound to account',
@@ -2083,6 +2108,7 @@ export default {
         switchSuccess: 'Account switched successfully',
         switchFailed: 'Switch failed: {error}',
         refreshSuccess: 'Quota refreshed successfully',
+        switchWarnings: 'Switch completed with notes: {warnings}',
         refreshFailed: 'Refresh quota failed: {error}',
         sessionExpired: 'Session expired, please re-add the token (plan info left unchanged)',
         addSuccess: 'Account added successfully',

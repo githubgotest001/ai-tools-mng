@@ -26,6 +26,19 @@
           @toggle-view="toggleViewMode"
           @clear-all="clearAllFilters"
         >
+          <button
+            @click="toggleSeamlessSwitch"
+            class="btn btn--icon btn--ghost"
+            :class="{ 'text-accent': seamlessSwitchEnabled }"
+            :aria-pressed="seamlessSwitchEnabled"
+            :aria-label="$t('platform.cursor.seamlessSwitch.toggle')"
+            v-tooltip="seamlessSwitchEnabled ? $t('platform.cursor.seamlessSwitch.tooltipOn') : $t('platform.cursor.seamlessSwitch.tooltipOff')"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M7 11V7l-5 5 5 5v-4h8v-2H7zm10-4v4H9v2h8v4l5-5-5-5z" v-if="seamlessSwitchEnabled" />
+              <path d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5 0 .85-.22 1.65-.6 2.35l1.46 1.46C18.57 15.6 19 14.35 19 13c0-3.87-3.13-7-7-7zm-5 7c0-.85.22-1.65.6-2.35L6.14 9.19C5.43 10.4 5 11.65 5 13c0 3.87 3.13 7 7 7v3l4-4-4-4v3c-2.76 0-5-2.24-5-5z" v-else />
+            </svg>
+          </button>
           <button @click="showAddDialog = true" class="btn btn--icon btn--ghost" v-tooltip="$t('platform.cursor.addAccount')">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
@@ -66,6 +79,28 @@
           </button>
         </AccountManagerHeader>
       </template>
+
+      <!-- 切号进度 -->
+      <div
+        v-if="switchProgress.visible"
+        class="mx-3 mt-2 mb-1 p-3 rounded-lg border"
+        :class="switchProgress.phase === 'error' ? 'border-danger/30 bg-danger/5' : 'border-accent/30 bg-accent/5'"
+        role="status"
+        aria-live="polite"
+      >
+        <div class="flex items-center gap-2 text-sm text-text">
+          <span v-if="switchProgress.phase === 'running'" class="btn-spinner btn-spinner--xs text-accent" aria-hidden="true"></span>
+          <span class="flex-1 min-w-0 truncate">{{ switchProgressLabel }}</span>
+          <span class="text-xs text-text-muted">{{ switchProgress.percent }}%</span>
+        </div>
+        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            class="h-full rounded-full transition-all duration-300"
+            :class="switchProgress.phase === 'error' ? 'bg-danger' : 'bg-accent'"
+            :style="{ width: `${switchProgress.percent}%` }"
+          ></div>
+        </div>
+      </div>
 
       <!-- macOS App Management 权限引导 -->
       <div v-if="needsAppManagementPermission" class="mx-3 mt-2 mb-1 p-3.5 rounded-lg border border-amber-500/30 bg-amber-500/5">
@@ -543,6 +578,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, provide, watch, nextTick } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { useI18n } from 'vue-i18n'
 import AccountCard from '../cursor/AccountCard.vue'
 import AccountTableRow from '../cursor/AccountTableRow.vue'
@@ -683,6 +719,10 @@ const sortType = usePersistedState('atm-cursor-sort-type', 'time', { validate: o
 const sortOrder = usePersistedState('atm-cursor-sort-order', 'desc', { validate: oneOf(['asc', 'desc']) })
 const viewMode = usePersistedState('atm-cursor-view-mode', 'card', { validate: oneOf(['card', 'table']) })
 const showRealEmail = usePersistedState('atm-cursor-show-real-email', true, {
+  validate: (v) => typeof v === 'boolean'
+})
+// 无感切换：Cursor 运行中通过登录 deeplink 换号，不重启；不支持时后端自动回退为重启切换
+const seamlessSwitchEnabled = usePersistedState('atm-cursor-seamless-switch', true, {
   validate: (v) => typeof v === 'boolean'
 })
 const pageSize = usePersistedState('atm-cursor-page-size', 20, { validate: oneOf(pageSizeOptions) })
@@ -898,6 +938,88 @@ const hasMachineInfo = (account) => {
     info['storage.serviceMachineId']
 }
 
+const toggleSeamlessSwitch = () => {
+  seamlessSwitchEnabled.value = !seamlessSwitchEnabled.value
+  window.$notify?.success(
+    seamlessSwitchEnabled.value
+      ? $t('platform.cursor.seamlessSwitch.enabledToast')
+      : $t('platform.cursor.seamlessSwitch.disabledToast')
+  )
+}
+
+// 切号进度（后端通过 cursor-switch-progress 事件推送）
+const switchProgress = ref({ visible: false, step: '', label: '', percent: 0, phase: 'idle' })
+let switchProgressUnlisten = null
+let switchProgressHideTimer = null
+
+const switchProgressLabel = computed(() => {
+  const { step, label } = switchProgress.value
+  if (!step) return $t('platform.cursor.switchProgress.preparing')
+  const key = `platform.cursor.switchProgress.${step}`
+  const translated = $t(key)
+  return translated === key ? label : translated
+})
+
+const startSwitchProgress = async () => {
+  if (switchProgressHideTimer) {
+    clearTimeout(switchProgressHideTimer)
+    switchProgressHideTimer = null
+  }
+  switchProgress.value = { visible: true, step: '', label: '', percent: 0, phase: 'running' }
+  if (!switchProgressUnlisten) {
+    try {
+      switchProgressUnlisten = await listen('cursor-switch-progress', (event) => {
+        const payload = event.payload || {}
+        switchProgress.value = {
+          visible: true,
+          step: payload.step || '',
+          label: payload.label || '',
+          percent: Math.max(switchProgress.value.percent, Number(payload.percent) || 0),
+          phase: payload.phase || 'running'
+        }
+      })
+    } catch (e) {
+      console.warn('Failed to listen switch progress:', e)
+    }
+  }
+}
+
+const stopSwitchProgress = (phase) => {
+  if (switchProgressUnlisten) {
+    switchProgressUnlisten()
+    switchProgressUnlisten = null
+  }
+  switchProgress.value = {
+    ...switchProgress.value,
+    phase,
+    percent: 100,
+    step: 'done',
+    label: ''
+  }
+  switchProgressHideTimer = setTimeout(() => {
+    switchProgress.value = { ...switchProgress.value, visible: false }
+    switchProgressHideTimer = null
+  }, phase === 'error' ? 4000 : 1500)
+}
+
+const notifySwitchWarnings = (warnings) => {
+  if (!Array.isArray(warnings) || warnings.length === 0) return
+  window.$notify?.warning(
+    $t('platform.cursor.messages.switchWarnings', { warnings: warnings.join('；') }),
+    8000
+  )
+}
+
+const notifyOperationError = (error) => {
+  if (isPermissionError(error)) {
+    window.$notify?.error($t(isMacOS ? 'platform.cursor.permission.operationFailed' : 'platform.cursor.permission.windowsOperationFailed'))
+    // App Management 引导只对 macOS 有意义
+    if (isMacOS) needsAppManagementPermission.value = true
+  } else {
+    window.$notify?.error(error?.message || error)
+  }
+}
+
 const handleSwitch = async (accountId) => {
   // 切换会关闭 Cursor、改机器码、写 state.vscdb 再拉起，两次并发会把库写乱
   if (switchingAccountId.value) {
@@ -907,6 +1029,20 @@ const handleSwitch = async (accountId) => {
 
   const account = accounts.value.find(a => a.id === accountId)
   if (!account) return
+
+  // 无感切换：不重启 Cursor、不改机器码，因此不弹机器码选项
+  if (seamlessSwitchEnabled.value) {
+    const confirmed = await window.$confirm?.({
+      title: $t('platform.cursor.switchConfirm.title'),
+      message: $t('platform.cursor.seamlessSwitch.confirmMessage', { email: account.email }),
+      confirmText: $t('platform.cursor.switch'),
+      cancelText: $t('common.cancel'),
+      variant: 'primary'
+    })
+    if (!confirmed) return
+    await performSeamlessSwitch(accountId)
+    return
+  }
 
   // 如果账号有绑定的机器码，弹出选项对话框（该对话框本身就是一次确认，不再叠加 confirm）
   if (hasMachineInfo(account)) {
@@ -928,24 +1064,55 @@ const handleSwitch = async (accountId) => {
   await performSwitch(accountId, false)
 }
 
-// 执行切换操作
+// 执行切换操作（重启式）
 const performSwitch = async (accountId, useBoundMachineId) => {
   if (switchingAccountId.value) return
   switchingAccountId.value = accountId
+  await startSwitchProgress()
+  let phase = 'error'
   try {
-    await invoke('cursor_switch_account', { accountId, useBoundMachineId })
+    const result = await invoke('cursor_switch_account', { accountId, useBoundMachineId })
+    phase = 'success'
     await loadAccounts()
     markItemUpsertById(accountId)
     window.$notify?.success($t('platform.cursor.messages.switchSuccess'))
+    notifySwitchWarnings(result?.warnings)
   } catch (error) {
     console.error('Failed to switch account:', error)
-    if (isPermissionError(error)) {
-      window.$notify?.error($t('platform.cursor.permission.operationFailed'))
-      needsAppManagementPermission.value = true
-    } else {
-      window.$notify?.error(error?.message || error)
-    }
+    notifyOperationError(error)
   } finally {
+    stopSwitchProgress(phase)
+    switchingAccountId.value = null
+  }
+}
+
+// 执行无感切换（失败时后端自动回退为重启切换）
+const performSeamlessSwitch = async (accountId) => {
+  if (switchingAccountId.value) return
+  switchingAccountId.value = accountId
+  await startSwitchProgress()
+  let phase = 'error'
+  try {
+    const result = await invoke('cursor_switch_account_seamless', { accountId, allowFallback: true })
+    phase = 'success'
+    await loadAccounts()
+    markItemUpsertById(accountId)
+    if (result?.fallback_used) {
+      window.$notify?.warning(
+        $t('platform.cursor.seamlessSwitch.fallbackUsed', { reason: result?.fallback_reason || '-' }),
+        8000
+      )
+    } else if (result?.mode === 'direct') {
+      window.$notify?.success($t('platform.cursor.seamlessSwitch.directSuccess'))
+    } else {
+      window.$notify?.success($t('platform.cursor.seamlessSwitch.success'))
+    }
+    notifySwitchWarnings(result?.warnings)
+  } catch (error) {
+    console.error('Failed to switch account seamlessly:', error)
+    notifyOperationError(error)
+  } finally {
+    stopSwitchProgress(phase)
     switchingAccountId.value = null
   }
 }
@@ -1392,9 +1559,20 @@ const loadAutoUpdateStatus = async () => {
   }
 }
 
+const isMacOS = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform || navigator.userAgent || '')
+
+const PERMISSION_ERROR_PATTERNS = [
+  'permission denied',
+  'operation not permitted',
+  'access is denied',
+  'os error 5)', // Windows ERROR_ACCESS_DENIED
+  'os error 13)', // EACCES
+  '拒绝访问'
+]
+
 const isPermissionError = (error) => {
   const msg = (error?.message || error || '').toString().toLowerCase()
-  return msg.includes('permission denied') || msg.includes('operation not permitted') || msg.includes('access is denied')
+  return PERMISSION_ERROR_PATTERNS.some(pattern => msg.includes(pattern))
 }
 
 const openAppManagementSettings = async () => {
@@ -1440,12 +1618,7 @@ const toggleAutoUpdate = async () => {
     }
   } catch (error) {
     console.error('Failed to toggle auto-update:', error)
-    if (isPermissionError(error)) {
-      window.$notify?.error($t('platform.cursor.permission.operationFailed'))
-      needsAppManagementPermission.value = true
-    } else {
-      window.$notify?.error(error?.message || error)
-    }
+    notifyOperationError(error)
   } finally {
     isTogglingAutoUpdate.value = false
   }
@@ -1474,6 +1647,14 @@ onBeforeUnmount(() => {
   if (nowTimer) {
     clearInterval(nowTimer)
     nowTimer = null
+  }
+  if (switchProgressUnlisten) {
+    switchProgressUnlisten()
+    switchProgressUnlisten = null
+  }
+  if (switchProgressHideTimer) {
+    clearTimeout(switchProgressHideTimer)
+    switchProgressHideTimer = null
   }
 })
 </script>

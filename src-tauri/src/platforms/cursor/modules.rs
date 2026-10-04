@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod db;
+pub mod deeplink;
 pub mod grok_bot;
 pub mod machine;
 pub mod mapper;

@@ -1,8 +1,8 @@
 //! Cursor 进程管理模块
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 #[cfg(target_os = "macos")]
 fn is_helper_process(name: &str, args: &str) -> bool {
@@ -250,8 +250,10 @@ pub fn close_cursor_with_result(timeout_secs: u64) -> CloseResult {
             .args(["/IM", "Cursor.exe", "/T"])
             .output();
 
-        // 等待优雅退出，使用 70% 的 timeout_secs，最多 5 秒
-        let graceful_wait = std::cmp::min((timeout_secs * 7) / 10, 5);
+        // 等待优雅退出，使用 70% 的 timeout_secs，最多 12 秒。
+        // Cursor 退出时要把 state.vscdb 刷盘并写 state.vscdb.backup，库大时 3 秒根本不够，
+        // 过早 /F 强杀容易留下半截 WAL，下次启动被判损坏后回滚到旧备份（表现为切号失效）
+        let graceful_wait = std::cmp::min((timeout_secs * 7) / 10, 12);
         let start = std::time::Instant::now();
         while start.elapsed() < std::time::Duration::from_secs(graceful_wait) {
             if !cursor_still_running(&mut sys) {
@@ -260,7 +262,7 @@ pub fn close_cursor_with_result(timeout_secs: u64) -> CloseResult {
                     warning: None,
                 };
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::thread::sleep(std::time::Duration::from_millis(200));
         }
 
         // 强制关闭 - 多次尝试
@@ -428,7 +430,17 @@ pub fn get_cursor_executable_path() -> Result<PathBuf, String> {
             }
         }
 
-        Err("Cursor not found".to_string())
+        // 非默认目录安装：从卸载信息里的 InstallLocation 找
+        if let Some(path) = find_cursor_from_registry() {
+            return Ok(path);
+        }
+
+        // 最后兜底：正在运行的 Cursor 进程
+        if let Some(path) = find_running_cursor_exe() {
+            return Ok(path);
+        }
+
+        Err("Cursor not found (set a custom Cursor path in settings)".to_string())
     }
 
     #[cfg(target_os = "linux")]
@@ -446,6 +458,150 @@ pub fn get_cursor_executable_path() -> Result<PathBuf, String> {
         }
 
         Err("Cursor not found".to_string())
+    }
+}
+
+/// 从 Windows 卸载信息（HKCU / HKLM，含 WOW6432Node）读取 Cursor 的 InstallLocation
+#[cfg(target_os = "windows")]
+pub fn find_cursor_from_registry() -> Option<PathBuf> {
+    use winreg::RegKey;
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
+
+    const UNINSTALL_PATHS: [&str; 2] = [
+        r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
+        r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+    ];
+
+    for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+        let root = RegKey::predef(hive);
+        for uninstall in UNINSTALL_PATHS {
+            let Ok(key) = root.open_subkey_with_flags(uninstall, KEY_READ) else {
+                continue;
+            };
+            for name in key.enum_keys().flatten() {
+                let Ok(sub) = key.open_subkey_with_flags(&name, KEY_READ) else {
+                    continue;
+                };
+                let display_name: String = sub.get_value("DisplayName").unwrap_or_default();
+                if !display_name.to_lowercase().starts_with("cursor") {
+                    continue;
+                }
+                let location: String = sub.get_value("InstallLocation").unwrap_or_default();
+                let location = location.trim().trim_matches('"');
+                if location.is_empty() {
+                    continue;
+                }
+                let exe = PathBuf::from(location).join("Cursor.exe");
+                if exe.exists() {
+                    return Some(exe);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// 找到正在运行的 Cursor 可执行文件路径（关闭 Cursor 之前调用，用于之后原路拉起）。
+/// - Windows / Linux：返回可执行文件
+/// - macOS：返回 .app 包路径（与自定义路径的格式一致）
+pub fn find_running_cursor_exe() -> Option<PathBuf> {
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::new().with_exe(UpdateKind::OnlyIfNotSet),
+    );
+
+    for process in sys.processes().values() {
+        if !is_cursor_process(process) {
+            continue;
+        }
+        let Some(exe) = process.exe() else {
+            continue;
+        };
+
+        #[cfg(target_os = "macos")]
+        {
+            let s = exe.to_string_lossy();
+            if let Some(idx) = s.find(".app/") {
+                let app = PathBuf::from(&s[..idx + 4]);
+                if app.exists() {
+                    return Some(app);
+                }
+            }
+            continue;
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let is_main_binary = exe
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| {
+                    let n = n.to_lowercase();
+                    n == "cursor.exe" || n == "cursor"
+                })
+                .unwrap_or(false);
+            if is_main_binary && exe.exists() {
+                return Some(exe.to_path_buf());
+            }
+        }
+    }
+    None
+}
+
+/// 解析本次要使用的 Cursor 路径：自定义路径 > 正在运行的进程 > 默认探测
+pub fn resolve_cursor_path(custom_path: Option<&str>) -> Option<PathBuf> {
+    if let Some(path) = custom_path {
+        let p = PathBuf::from(path);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    if let Some(p) = find_running_cursor_exe() {
+        return Some(p);
+    }
+    get_cursor_executable_path().ok()
+}
+
+/// 让 Cursor 打开一个 `cursor://` 链接（Cursor 未运行时会先启动再处理）。
+///
+/// 注意：url 里带 token，任何错误信息和日志都不能包含它。
+pub fn open_cursor_url(cursor_path: Option<&Path>, url: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        // macOS 由 LaunchServices 投递给已注册 cursor:// 的 Cursor.app
+        let mut cmd = Command::new("open");
+        if let Some(app) = cursor_path {
+            cmd.arg("-a").arg(app);
+        }
+        let status = cmd
+            .arg(url)
+            .status()
+            .map_err(|e| format!("Failed to open Cursor URL ({:?})", e.kind()))?;
+        if !status.success() {
+            return Err(format!("Failed to open Cursor URL (exit code {:?})", status.code()));
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // 与 Cursor 自己注册的协议处理命令一致：Cursor.exe --open-url -- "<url>"
+        // 已有实例时，新进程只负责把参数转交给主进程然后退出
+        if let Some(exe) = cursor_path.filter(|p| p.is_file()) {
+            let mut cmd = Command::new(exe);
+            cmd.args(["--open-url", "--", url]);
+            match cmd.spawn() {
+                Ok(_) => return Ok(()),
+                Err(e) => eprintln!("Failed to pass URL via Cursor executable, falling back to shell open: {}", e),
+            }
+        }
+
+        // 兜底：交给系统协议处理器（需要 cursor:// 已注册）
+        // open 的错误信息会带上完整命令行（含 URL / token），这里只保留错误类型
+        open::that(url)
+            .map_err(|e| format!("Failed to open Cursor URL via system handler ({:?})", e.kind()))
     }
 }
 

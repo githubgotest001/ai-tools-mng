@@ -414,6 +414,53 @@ pub struct StripeProfileResponse {
     pub payment_id: Option<String>,
 }
 
+impl StripeProfileResponse {
+    /// 从 Stripe Profile 推导账号套餐，口径与 usage-summary 的 `membershipType` 保持一致。
+    ///
+    /// - `membershipType` 是 Cursor 客户端自己用的字段（3.23.x 的 refreshMembership 只读它），
+    ///   学生优惠账号这里是 `pro_student`；
+    /// - `individualMembershipType` 只给出基础档位（学生账号是 `pro`），但团队成员需要它
+    ///   来显示个人套餐（此时 `membershipType` 可能是 team / enterprise）。
+    ///
+    /// 规则：两者都有且 `membershipType` 是 `individualMembershipType` 的细分变体
+    /// （`pro` → `pro_student`）时取 `membershipType`；其余情况保持原口径
+    /// （individual 优先，缺失再回退 membershipType）。空字符串视为缺失。
+    pub fn plan_type(&self) -> Option<String> {
+        let clean = |v: &Option<String>| {
+            v.as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        };
+        let individual = clean(&self.individual_membership_type);
+        let membership = clean(&self.membership_type);
+
+        match (individual, membership) {
+            (Some(ind), Some(mem)) => {
+                let ind_key = normalize_plan_key(&ind);
+                let mem_key = normalize_plan_key(&mem);
+                if mem_key != ind_key && mem_key.starts_with(&format!("{}_", ind_key)) {
+                    Some(mem)
+                } else {
+                    Some(ind)
+                }
+            }
+            (Some(ind), None) => Some(ind),
+            (None, mem) => mem,
+        }
+    }
+}
+
+/// 套餐名归一：小写、空格与连字符统一为下划线（`Pro Student` / `pro-student` → `pro_student`）
+fn normalize_plan_key(plan: &str) -> String {
+    plan.trim()
+        .to_lowercase()
+        .split(|c: char| c.is_whitespace() || c == '-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
 /// 使用 access_token 获取 Stripe 订阅信息（Bearer 认证，不需要 session）
 pub async fn get_stripe_profile(access_token: &str) -> Result<StripeProfileResponse, String> {
     let client = create_proxy_client()?;
@@ -749,9 +796,130 @@ pub async fn get_access_token_from_session(
     Err("Timeout: Failed to get access token after 20 seconds".to_string())
 }
 
+// ============================================================================
+// refresh_token 刷新（与 Cursor 客户端自身使用的接口一致）
+// ============================================================================
+
+/// Cursor 桌面端 OAuth client_id（来自 Cursor 客户端的 refresh 请求）
+const CURSOR_AUTH_CLIENT_ID: &str = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB";
+
+#[derive(Debug, Deserialize)]
+struct OAuthRefreshResponse {
+    #[serde(default)]
+    access_token: Option<String>,
+    #[serde(default)]
+    id_token: Option<String>,
+    #[serde(rename = "shouldLogout", default)]
+    should_logout: bool,
+}
+
+/// 用 refresh_token 换新的 access_token。
+///
+/// Cursor 客户端拿到结果后把 accessToken / refreshToken 都写成新的 access_token，
+/// 这里返回的 `refresh_token` 也按同样规则填充。错误信息里不包含任何 token。
+pub async fn refresh_access_token(refresh_token: &str) -> Result<AccessTokenResponse, String> {
+    if refresh_token.trim().is_empty() {
+        return Err("No refresh token available".to_string());
+    }
+
+    let client = create_proxy_client()?;
+    let payload = serde_json::json!({
+        "grant_type": "refresh_token",
+        "client_id": CURSOR_AUTH_CLIENT_ID,
+        "refresh_token": refresh_token,
+    });
+
+    let response = client
+        .post("https://api2.cursor.sh/oauth/token")
+        .header("Content-Type", "application/json")
+        .timeout(std::time::Duration::from_secs(30))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Token refresh request failed: {}", e.without_url()))?;
+
+    let status_code = response.status().as_u16();
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read token refresh response: {}", e.without_url()))?;
+
+    if status_code != 200 {
+        // 不回显 body，避免把服务端回传的任何敏感字段写进日志/界面
+        return Err(format!("Token refresh failed (HTTP {})", status_code));
+    }
+
+    let parsed: OAuthRefreshResponse = serde_json::from_str(&body)
+        .map_err(|_| "Failed to parse token refresh response".to_string())?;
+
+    if parsed.should_logout {
+        return Err("Token refresh rejected: refresh token is no longer valid (shouldLogout)".to_string());
+    }
+
+    let access_token = parsed
+        .access_token
+        .or(parsed.id_token)
+        .filter(|t| !t.is_empty())
+        .ok_or_else(|| "Token refresh response has no access token".to_string())?;
+
+    Ok(AccessTokenResponse {
+        refresh_token: Some(access_token.clone()),
+        access_token,
+        auth_id: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn profile(individual: Option<&str>, membership: Option<&str>) -> StripeProfileResponse {
+        StripeProfileResponse {
+            membership_type: membership.map(str::to_string),
+            individual_membership_type: individual.map(str::to_string),
+            subscription_status: None,
+            days_remaining_on_trial: None,
+            payment_id: None,
+        }
+    }
+
+    #[test]
+    fn student_plan_is_not_downgraded_to_pro() {
+        // 学生账号：individual 只给基础档位，membershipType 才是 Cursor / usage-summary 用的值
+        assert_eq!(
+            profile(Some("pro"), Some("pro_student")).plan_type().as_deref(),
+            Some("pro_student")
+        );
+        assert_eq!(
+            profile(Some("Pro"), Some("pro-student")).plan_type().as_deref(),
+            Some("pro-student")
+        );
+        assert_eq!(
+            profile(None, Some("pro_student")).plan_type().as_deref(),
+            Some("pro_student")
+        );
+    }
+
+    #[test]
+    fn plan_type_keeps_individual_priority_otherwise() {
+        // 团队成员：显示个人套餐，不被 team / enterprise 覆盖（保持原口径）
+        assert_eq!(
+            profile(Some("pro"), Some("enterprise")).plan_type().as_deref(),
+            Some("pro")
+        );
+        assert_eq!(
+            profile(Some("ultra"), Some("ultra")).plan_type().as_deref(),
+            Some("ultra")
+        );
+        // pro 不是 pro_plus 的细分，pro_plus 也不能被 membershipType=pro 降级
+        assert_eq!(
+            profile(Some("pro_plus"), Some("pro")).plan_type().as_deref(),
+            Some("pro_plus")
+        );
+        assert_eq!(profile(Some("  "), Some("free")).plan_type().as_deref(), Some("free"));
+        assert_eq!(profile(Some("pro"), None).plan_type().as_deref(), Some("pro"));
+        assert_eq!(profile(None, Some("")).plan_type(), None);
+    }
 
     #[test]
     fn parses_plan_cents_and_percent_fields() {

@@ -732,6 +732,7 @@ pub fn run() {
             cursor::cursor_list_accounts,
             cursor::cursor_delete_account,
             cursor::cursor_switch_account,
+            cursor::cursor_switch_account_seamless,
             cursor::cursor_generate_and_bind_machine_id,
             cursor::cursor_export_accounts,
             cursor::cursor_get_custom_path,

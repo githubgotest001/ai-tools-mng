@@ -2055,6 +2055,30 @@ export default {
         title: '确认切换账号',
         message: '确定要切换到账号 "{email}" 吗？这将覆盖 Cursor 当前的登录状态。'
       },
+      seamlessSwitch: {
+        toggle: '无感切换（不重启）',
+        tooltipOn: '无感切换（不重启）：已开启。Cursor 运行中直接换号，不支持时自动回退为重启切换；此模式不修改机器码',
+        tooltipOff: '无感切换（不重启）：已关闭。切换时会关闭并重启 Cursor，并按选项处理机器码',
+        enabledToast: '已开启无感切换（不重启）',
+        disabledToast: '已关闭无感切换，将使用重启切换',
+        confirmMessage: '确定要切换到账号 "{email}" 吗？Cursor 运行中时将直接切换登录状态，无需重启；若当前版本不支持会自动回退为重启切换。',
+        success: '已无感切换，Cursor 无需重启',
+        directSuccess: 'Cursor 未运行，已写入登录信息并启动 Cursor',
+        fallbackUsed: '无感切换未生效，已回退为重启切换并完成。原因：{reason}'
+      },
+      switchProgress: {
+        preparing: '正在准备账号信息...',
+        token: '正在检查账号 Token...',
+        close: '正在关闭 Cursor...',
+        machine: '正在更新机器码...',
+        write: '正在写入登录信息...',
+        launch: '正在启动 Cursor...',
+        detect: '正在检测 Cursor 版本...',
+        deeplink: '正在通知 Cursor 切换账号...',
+        verify: '正在确认 Cursor 已切换...',
+        fallback: '无感切换未生效，正在回退为重启切换...',
+        done: '切换结束'
+      },
       deleteConfirm: {
         title: '确认删除',
         message: '确定要删除 Cursor 账号 "{email}" 吗？此操作无法撤销。'
@@ -2066,7 +2090,8 @@ export default {
         openSettings: '打开系统设置',
         recheck: '重新检测',
         granted: '权限已获取',
-        operationFailed: '操作失败：缺少应用管理权限，请在「系统设置 > 隐私与安全性 > 应用管理」中授予权限后重试；开启后请重新检测或重启应用'
+        operationFailed: '操作失败：缺少应用管理权限，请在「系统设置 > 隐私与安全性 > 应用管理」中授予权限后重试；开启后请重新检测或重启应用',
+        windowsOperationFailed: '操作失败：拒绝访问。Cursor 可能安装在 Program Files 等受保护目录，或文件被占用；请以管理员身份运行本工具，或完全退出 Cursor 后重试'
       },
       messages: {
         machineIdGenerated: '机器码已生成并绑定到账号',
@@ -2076,6 +2101,7 @@ export default {
         switchSuccess: '账号切换成功',
         switchFailed: '切换失败: {error}',
         refreshSuccess: '配额刷新成功',
+        switchWarnings: '切换已完成，但有以下提示：{warnings}',
         refreshFailed: '刷新配额失败: {error}',
         sessionExpired: 'Session 已失效，请重新获取 Token（套餐信息保持不变）',
         addSuccess: '账号添加成功',
